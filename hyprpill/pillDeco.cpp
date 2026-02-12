@@ -331,8 +331,12 @@ void CHyprPill::onMouseMove(SCallbackInfo& info, Vector2D coords) {
         return;
     }
 
-    const auto hb = hoverHitboxGlobal();
-    m_hovered     = VECINRECT(coords, hb.x, hb.y, hb.x + hb.w, hb.y + hb.h);
+    const auto hb    = hoverHitboxGlobal();
+    const bool wasHovered = m_hovered;
+    m_hovered        = VECINRECT(coords, hb.x, hb.y, hb.x + hb.w, hb.y + hb.h);
+
+    if (m_hovered != wasHovered)
+        damageEntire();
 
     if (m_hovered) {
         if (!m_dragPending && Desktop::focusState()->window() != m_pWindow.lock())
@@ -368,12 +372,6 @@ void CHyprPill::onTouchMove(SCallbackInfo& info, ITouch::SMotionEvent e) {
 }
 
 void CHyprPill::updateDragPosition(const Vector2D& coordsGlobal) {
-    if (!m_draggingThis && !m_pWindow->m_isFloating) {
-        g_pKeybindManager->m_dispatchers["setfloating"]("activewindow");
-        g_pKeybindManager->m_dispatchers["resizewindowpixel"]("exact 50% 50%,activewindow");
-        g_pKeybindManager->m_dispatchers["pin"]("activewindow");
-    }
-
     const auto targetPos = coordsGlobal - m_dragCursorOffset;
     g_pKeybindManager->m_dispatchers["movewindowpixel"](std::format("exact {} {},activewindow", (int)targetPos.x, (int)targetPos.y));
     m_draggingThis = true;
@@ -409,7 +407,7 @@ void CHyprPill::updateCursorShape(const std::optional<Vector2D>& coords) {
         if (!PPILL || !PPILL->inputIsValid())
             continue;
 
-        const auto HB = PPILL->clickHitboxGlobal();
+        const auto HB = PPILL->hoverHitboxGlobal();
         if (VECINRECT(COORDS, HB.x, HB.y, HB.x + HB.w, HB.y + HB.h)) {
             if (!HOVERCURSOR.empty())
                 Cursor::overrideController->setOverride(HOVERCURSOR, Cursor::CURSOR_OVERRIDE_UNKNOWN);
