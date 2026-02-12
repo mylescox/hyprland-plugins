@@ -226,6 +226,10 @@ void CHyprPill::updateWindow(PHLWINDOW pWindow) {
 
 void CHyprPill::damageEntire() {
     const auto box = visibleBoxGlobal().expand(8);
+
+    if (m_bLastRelativeBox.w > 0 && m_bLastRelativeBox.h > 0)
+        g_pHyprRenderer->damageBox(m_bLastRelativeBox);
+
     g_pHyprRenderer->damageBox(box);
     m_bLastRelativeBox = box;
 }
@@ -248,8 +252,10 @@ CBox CHyprPill::visibleBoxGlobal() const {
     const auto WORKSPACEOFFSET = PWORKSPACE && !owner->m_pinned ? PWORKSPACE->m_renderOffset->value() : Vector2D();
     box.translate(WORKSPACEOFFSET);
 
-    const float windowLeft = static_cast<float>(box.x);
-    const float windowRight = windowLeft + std::max(1.F, static_cast<float>(owner->m_realSize->value().x));
+    const auto ownerPos      = owner->m_realPosition->value() + owner->m_floatingOffset + WORKSPACEOFFSET;
+    const float windowLeft   = static_cast<float>(ownerPos.x);
+    const float windowWidth  = std::max(1.F, static_cast<float>(owner->m_realSize->value().x));
+    const float windowRight  = windowLeft + windowWidth;
     const float centerX = windowLeft + (windowRight - windowLeft) * 0.5F;
     const auto desiredWidth = std::max<int>(1, std::lround(m_width > 1.F ? m_width : **PWIDTH));
     box.w = std::min<int>(desiredWidth, std::max<int>(1, static_cast<int>(std::lround(windowRight - windowLeft))));
@@ -276,6 +282,8 @@ CBox CHyprPill::visibleBoxGlobal() const {
 
         const float ownerTop       = static_cast<float>(box.y);
         const float basePillY      = std::lround(ownerTop - box.h - m_offsetY);
+        const float hoverLeft      = std::lround((centerX - box.w / 2.F) - hoverWidthPad);
+        const float hoverRight     = std::lround((centerX + box.w / 2.F) + hoverWidthPad);
         const float hoverTop       = std::lround(basePillY - hoverHeightPad + hoverOffsetY);
         const float hoverBottom    = hoverTop + box.h + hoverHeightPad * 2.F;
 
@@ -301,14 +309,11 @@ CBox CHyprPill::visibleBoxGlobal() const {
             if (!overlapsHoverY)
                 continue;
 
-            // Only dodge when a window edge actually touches the hover hitbox.
-            const bool edgeTouchesHover = (candidateBottom >= hoverTop && candidateBottom <= hoverBottom) || (candidateTop >= hoverTop && candidateTop <= hoverBottom);
+            // Only dodge when at least one occluder edge touches the hover hitbox.
+            const bool edgeTouchesHover =
+                (candidateBottom >= hoverTop && candidateBottom <= hoverBottom) || (candidateTop >= hoverTop && candidateTop <= hoverBottom) ||
+                (candidateRight >= hoverLeft && candidateRight <= hoverRight) || (candidateLeft >= hoverLeft && candidateLeft <= hoverRight);
             if (!edgeTouchesHover)
-                continue;
-
-            // Require overlap at the owner's top edge so side-only overlaps do not trigger dodging.
-            const bool occludesOwnerTopEdge = candidateTop < ownerTop && candidateBottom > ownerTop;
-            if (!occludesOwnerTopEdge)
                 continue;
 
             const float clippedLeft  = std::max(windowLeft, candidateLeft - occluderMargin);
