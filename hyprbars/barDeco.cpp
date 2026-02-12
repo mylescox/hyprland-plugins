@@ -274,7 +274,7 @@ bool CHyprBar::doButtonPress(Hyprlang::INT* const* PBARPADDING, Hyprlang::INT* c
 
     for (auto& b : g_pGlobalState->buttons) {
         const auto BARBUF     = Vector2D{(int)assignedBoxGlobal().w, **PHEIGHT};
-        Vector2D   currentPos = Vector2D{(BUTTONSRIGHT ? BARBUF.x - **PBARBUTTONPADDING - b.size - offset : offset), (BARBUF.y - b.size) / 2.0}.floor();
+        Vector2D   currentPos = Vector2D{(BUTTONSRIGHT ? BARBUF.x - **PBARBUTTONPADDING - b.size - offset : offset), getBarContentY(BARBUF.y, b.size)}.floor();
 
         if (VECINRECT(COORDS, currentPos.x, currentPos.y, currentPos.x + b.size + **PBARBUTTONPADDING, currentPos.y + b.size)) {
             // hit on close
@@ -348,6 +348,23 @@ void CHyprBar::renderText(SP<CTexture> out, const std::string& text, const CHypr
     cairo_surface_destroy(CAIROSURFACE);
 }
 
+float CHyprBar::getBarContentY(const float barHeight, const float contentHeight) const {
+    static auto* const PVERTICALALIGN  = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprbars:bar_content_v_align")->getDataStaticPtr();
+    static auto* const PVERTICALOFFSET = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprbars:bar_content_vertical_offset")->getDataStaticPtr();
+
+    const auto align = std::string{*PVERTICALALIGN};
+
+    float      y = (barHeight - contentHeight) / 2.F;
+    if (align == "top")
+        y = 0.F;
+    else if (align == "bottom")
+        y = barHeight - contentHeight;
+
+    y += **PVERTICALOFFSET;
+
+    return std::clamp(y, -contentHeight, barHeight);
+}
+
 void CHyprBar::renderBarTitle(const Vector2D& bufferSize, const float scale) {
     static auto* const PCOLOR            = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprbars:col.text")->getDataStaticPtr();
     static auto* const PSIZE             = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprbars:bar_text_size")->getDataStaticPtr();
@@ -409,7 +426,7 @@ void CHyprBar::renderBarTitle(const Vector2D& bufferSize, const float scale) {
     pango_layout_get_size(layout, &layoutWidth, &layoutHeight);
     const int xOffset = std::string{*PALIGN} == "left" ? std::round(scaledBarPadding + (BUTTONSRIGHT ? 0 : scaledButtonsSize)) :
                                                          std::round(((bufferSize.x - scaledBorderSize) / 2.0 - layoutWidth / PANGO_SCALE / 2.0));
-    const int yOffset = std::round((bufferSize.y / 2.0 - layoutHeight / PANGO_SCALE / 2.0));
+    const int yOffset = std::round(getBarContentY(bufferSize.y, layoutHeight / static_cast<float>(PANGO_SCALE)));
 
     cairo_move_to(CAIRO, xOffset, yOffset);
     pango_cairo_show_layout(CAIRO, layout);
@@ -478,7 +495,9 @@ void CHyprBar::renderBarButtons(const Vector2D& bufferSize, const float scale) {
         const auto  scaledButtonSize = button.size * scale;
         const auto  scaledButtonsPad = **PBARBUTTONPADDING * scale;
 
-        const auto  pos   = Vector2D{BUTTONSRIGHT ? bufferSize.x - offset - scaledButtonSize / 2.0 : offset + scaledButtonSize / 2.0, bufferSize.y / 2.0}.floor();
+        const auto  pos   = Vector2D{BUTTONSRIGHT ? bufferSize.x - offset - scaledButtonSize / 2.0 : offset + scaledButtonSize / 2.0,
+                                    getBarContentY(bufferSize.y, scaledButtonSize) + scaledButtonSize / 2.0}
+                               .floor();
         auto        color = button.bgcol;
 
         if (**PINACTIVECOLOR > 0) {
@@ -534,7 +553,9 @@ void CHyprBar::renderBarButtonsText(CBox* barBox, const float scale, const float
 
         // check if hovering here
         const auto BARBUF     = Vector2D{(int)assignedBoxGlobal().w, **PHEIGHT};
-        Vector2D   currentPos = Vector2D{(BUTTONSRIGHT ? BARBUF.x - **PBARBUTTONPADDING - button.size - noScaleOffset : noScaleOffset), (BARBUF.y - button.size) / 2.0}.floor();
+        Vector2D   currentPos = Vector2D{(BUTTONSRIGHT ? BARBUF.x - **PBARBUTTONPADDING - button.size - noScaleOffset : noScaleOffset),
+                                           getBarContentY(BARBUF.y, button.size)}
+                                 .floor();
         bool       hovering   = VECINRECT(COORDS, currentPos.x, currentPos.y, currentPos.x + button.size + **PBARBUTTONPADDING, currentPos.y + button.size);
         noScaleOffset += **PBARBUTTONPADDING + button.size;
 
@@ -549,8 +570,8 @@ void CHyprBar::renderBarButtonsText(CBox* barBox, const float scale, const float
         if (button.iconTex->m_texID == 0)
             continue;
 
-        CBox pos = {barBox->x + (BUTTONSRIGHT ? barBox->width - offset - scaledButtonSize : offset), barBox->y + (barBox->height - scaledButtonSize) / 2.0, scaledButtonSize,
-                    scaledButtonSize};
+        CBox pos = {barBox->x + (BUTTONSRIGHT ? barBox->width - offset - scaledButtonSize : offset),
+                    barBox->y + getBarContentY(barBox->height, scaledButtonSize), scaledButtonSize, scaledButtonSize};
 
         if (!**PICONONHOVER || (**PICONONHOVER && m_iButtonHoverState > 0))
             g_pHyprOpenGL->renderTexture(button.iconTex, pos, {.a = a});
@@ -792,7 +813,7 @@ void CHyprBar::damageOnButtonHover() {
 
     for (auto& b : g_pGlobalState->buttons) {
         const auto BARBUF     = Vector2D{(int)assignedBoxGlobal().w, **PHEIGHT};
-        Vector2D   currentPos = Vector2D{(BUTTONSRIGHT ? BARBUF.x - **PBARBUTTONPADDING - b.size - offset : offset), (BARBUF.y - b.size) / 2.0}.floor();
+        Vector2D   currentPos = Vector2D{(BUTTONSRIGHT ? BARBUF.x - **PBARBUTTONPADDING - b.size - offset : offset), getBarContentY(BARBUF.y, b.size)}.floor();
 
         bool       hover = VECINRECT(COORDS, currentPos.x, currentPos.y, currentPos.x + b.size + **PBARBUTTONPADDING, currentPos.y + b.size);
 
