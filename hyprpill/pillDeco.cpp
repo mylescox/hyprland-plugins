@@ -357,8 +357,14 @@ void CHyprPill::onMouseMove(SCallbackInfo& info, Vector2D coords) {
         return;
     }
 
-    if (m_draggingThis) {
+    if (m_dragPending || m_draggingThis) {
         info.cancelled = true;
+
+        if (Desktop::focusState()->window() != m_pWindow.lock())
+            Desktop::focusState()->fullWindowFocus(m_pWindow.lock());
+    }
+
+    if (m_draggingThis) {
         if (!m_startedMouseDrag)
             updateDragPosition(coords);
         updateCursorShape(coords);
