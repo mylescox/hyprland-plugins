@@ -268,15 +268,28 @@ void CHyprBar::handleMovement() {
     return;
 }
 
+// edgeOffset uses the bar's natural flow from whichever edge buttons start at.
+// All inputs/outputs are in the same coordinate space selected by the caller (logical px or monitor-scaled px).
+CBox CHyprBar::computeBarBox(const Vector2D& barSize, const float contentSize, const float edgeOffset, const float buttonPadding, const bool buttonsRight) {
+    const float x = buttonsRight ? barSize.x - buttonPadding - contentSize - edgeOffset : edgeOffset;
+    return {std::floor(x), std::floor(computeContentY(barSize.y, contentSize)), std::ceil(contentSize + buttonPadding), std::ceil(contentSize)};
+}
+
+// contentHeight may be 0 as a sentinel for "nothing to draw", and will resolve to the vertical center.
+// Units are pixels in the caller's space (pre-scale logical or post-scale monitor px).
+float CHyprBar::computeContentY(const float barHeight, const float contentHeight) {
+    return (barHeight - contentHeight) / 2.F;
+}
+
 bool CHyprBar::doButtonPress(Hyprlang::INT* const* PBARPADDING, Hyprlang::INT* const* PBARBUTTONPADDING, Hyprlang::INT* const* PHEIGHT, Vector2D COORDS, const bool BUTTONSRIGHT) {
     //check if on a button
-    float offset = **PBARPADDING;
+    const auto barSize = Vector2D{(float)assignedBoxGlobal().w, (float)**PHEIGHT};
+    float      offset  = **PBARPADDING;
 
     for (auto& b : g_pGlobalState->buttons) {
-        const auto BARBUF     = Vector2D{(int)assignedBoxGlobal().w, **PHEIGHT};
-        Vector2D   currentPos = Vector2D{(BUTTONSRIGHT ? BARBUF.x - **PBARBUTTONPADDING - b.size - offset : offset), (BARBUF.y - b.size) / 2.0}.floor();
+        const auto buttonBox = computeBarBox(barSize, b.size, offset, **PBARBUTTONPADDING, BUTTONSRIGHT);
 
-        if (VECINRECT(COORDS, currentPos.x, currentPos.y, currentPos.x + b.size + **PBARBUTTONPADDING, currentPos.y + b.size)) {
+        if (VECINRECT(COORDS, buttonBox.x, buttonBox.y, buttonBox.x + buttonBox.w, buttonBox.y + buttonBox.h)) {
             // hit on close
             g_pKeybindManager->m_dispatchers["exec"](b.cmd);
             return true;
@@ -409,7 +422,7 @@ void CHyprBar::renderBarTitle(const Vector2D& bufferSize, const float scale) {
     pango_layout_get_size(layout, &layoutWidth, &layoutHeight);
     const int xOffset = std::string{*PALIGN} == "left" ? std::round(scaledBarPadding + (BUTTONSRIGHT ? 0 : scaledButtonsSize)) :
                                                          std::round(((bufferSize.x - scaledBorderSize) / 2.0 - layoutWidth / PANGO_SCALE / 2.0));
-    const int yOffset = std::round((bufferSize.y / 2.0 - layoutHeight / PANGO_SCALE / 2.0));
+    const int yOffset = std::round(computeContentY(bufferSize.y, layoutHeight / PANGO_SCALE));
 
     cairo_move_to(CAIRO, xOffset, yOffset);
     pango_cairo_show_layout(CAIRO, layout);
@@ -472,14 +485,17 @@ void CHyprBar::renderBarButtons(const Vector2D& bufferSize, const float scale) {
     cairo_restore(CAIRO);
 
     // draw buttons
-    int offset = **PBARPADDING * scale;
+    float      offset   = **PBARPADDING * scale;
     for (size_t i = 0; i < visibleCount; ++i) {
         const auto& button           = g_pGlobalState->buttons[i];
         const auto  scaledButtonSize = button.size * scale;
         const auto  scaledButtonsPad = **PBARBUTTONPADDING * scale;
 
-        const auto  pos   = Vector2D{BUTTONSRIGHT ? bufferSize.x - offset - scaledButtonSize / 2.0 : offset + scaledButtonSize / 2.0, bufferSize.y / 2.0}.floor();
-        auto        color = button.bgcol;
+        const auto  buttonBox = computeBarBox(bufferSize, scaledButtonSize, offset, scaledButtonsPad, BUTTONSRIGHT);
+        const auto  pos       = Vector2D{BUTTONSRIGHT ? buttonBox.x + scaledButtonsPad + scaledButtonSize / 2.F : buttonBox.x + scaledButtonSize / 2.F,
+                                   buttonBox.y + scaledButtonSize / 2.F}
+                                  .floor();
+        auto        color     = button.bgcol;
 
         if (**PINACTIVECOLOR > 0) {
             color = m_bWindowHasFocus ? color : CHyprColor(**PINACTIVECOLOR);
@@ -520,23 +536,24 @@ void CHyprBar::renderBarButtonsText(CBox* barBox, const float scale, const float
     static auto* const PALIGNBUTTONS     = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprbars:bar_buttons_alignment")->getDataStaticPtr();
     static auto* const PICONONHOVER      = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprbars:icon_on_hover")->getDataStaticPtr();
 
-    const bool         BUTTONSRIGHT = std::string{*PALIGNBUTTONS} != "left";
-    const auto         visibleCount = getVisibleButtonCount(PBARBUTTONPADDING, PBARPADDING, Vector2D{barBox->w, barBox->h}, scale);
-    const auto         COORDS       = cursorRelativeToBar();
+    const bool         BUTTONSRIGHT    = std::string{*PALIGNBUTTONS} != "left";
+    const auto         visibleCount    = getVisibleButtonCount(PBARBUTTONPADDING, PBARPADDING, Vector2D{barBox->w, barBox->h}, scale);
+    const auto         COORDS          = cursorRelativeToBar();
+    const auto         logicalBarSize  = Vector2D{(float)assignedBoxGlobal().w, (float)**PHEIGHT};
+    const auto         scaledBarSize   = Vector2D{(float)barBox->w, (float)barBox->h};
 
-    int                offset        = **PBARPADDING * scale;
-    float              noScaleOffset = **PBARPADDING;
+    float              scaledOffset    = **PBARPADDING * scale;
+    float              logicalOffset   = **PBARPADDING;
 
     for (size_t i = 0; i < visibleCount; ++i) {
         auto&      button           = g_pGlobalState->buttons[i];
         const auto scaledButtonSize = button.size * scale;
         const auto scaledButtonsPad = **PBARBUTTONPADDING * scale;
 
-        // check if hovering here
-        const auto BARBUF     = Vector2D{(int)assignedBoxGlobal().w, **PHEIGHT};
-        Vector2D   currentPos = Vector2D{(BUTTONSRIGHT ? BARBUF.x - **PBARBUTTONPADDING - button.size - noScaleOffset : noScaleOffset), (BARBUF.y - button.size) / 2.0}.floor();
-        bool       hovering   = VECINRECT(COORDS, currentPos.x, currentPos.y, currentPos.x + button.size + **PBARBUTTONPADDING, currentPos.y + button.size);
-        noScaleOffset += **PBARBUTTONPADDING + button.size;
+        // hover check in logical (unscaled) bar coordinates
+        const auto logicalButtonBox = computeBarBox(logicalBarSize, button.size, logicalOffset, **PBARBUTTONPADDING, BUTTONSRIGHT);
+        bool       hovering         = VECINRECT(COORDS, logicalButtonBox.x, logicalButtonBox.y, logicalButtonBox.x + logicalButtonBox.w, logicalButtonBox.y + logicalButtonBox.h);
+        logicalOffset += **PBARBUTTONPADDING + button.size;
 
         if (button.iconTex->m_texID == 0 /* icon is not rendered */ && !button.icon.empty()) {
             // render icon
@@ -549,12 +566,13 @@ void CHyprBar::renderBarButtonsText(CBox* barBox, const float scale, const float
         if (button.iconTex->m_texID == 0)
             continue;
 
-        CBox pos = {barBox->x + (BUTTONSRIGHT ? barBox->width - offset - scaledButtonSize : offset), barBox->y + (barBox->height - scaledButtonSize) / 2.0, scaledButtonSize,
+        const auto scaledButtonBox = computeBarBox(scaledBarSize, scaledButtonSize, scaledOffset, scaledButtonsPad, BUTTONSRIGHT);
+        CBox       pos             = {barBox->x + (BUTTONSRIGHT ? scaledButtonBox.x + scaledButtonsPad : scaledButtonBox.x), barBox->y + scaledButtonBox.y, scaledButtonSize,
                     scaledButtonSize};
 
         if (!**PICONONHOVER || (**PICONONHOVER && m_iButtonHoverState > 0))
             g_pHyprOpenGL->renderTexture(button.iconTex, pos, {.a = a});
-        offset += scaledButtonsPad + scaledButtonSize;
+        scaledOffset += scaledButtonsPad + scaledButtonSize;
 
         bool currentBit = (m_iButtonHoverState & (1 << i)) != 0;
         if (hovering != currentBit) {
@@ -786,15 +804,15 @@ void CHyprBar::damageOnButtonHover() {
     static auto* const PALIGNBUTTONS     = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprbars:bar_buttons_alignment")->getDataStaticPtr();
     const bool         BUTTONSRIGHT      = std::string{*PALIGNBUTTONS} != "left";
 
-    float              offset = **PBARPADDING;
+    const auto         barSize = Vector2D{(float)assignedBoxGlobal().w, (float)**PHEIGHT};
+    float              offset  = **PBARPADDING;
 
-    const auto         COORDS = cursorRelativeToBar();
+    const auto         COORDS  = cursorRelativeToBar();
 
     for (auto& b : g_pGlobalState->buttons) {
-        const auto BARBUF     = Vector2D{(int)assignedBoxGlobal().w, **PHEIGHT};
-        Vector2D   currentPos = Vector2D{(BUTTONSRIGHT ? BARBUF.x - **PBARBUTTONPADDING - b.size - offset : offset), (BARBUF.y - b.size) / 2.0}.floor();
+        const auto buttonBox = computeBarBox(barSize, b.size, offset, **PBARBUTTONPADDING, BUTTONSRIGHT);
 
-        bool       hover = VECINRECT(COORDS, currentPos.x, currentPos.y, currentPos.x + b.size + **PBARBUTTONPADDING, currentPos.y + b.size);
+        bool       hover = VECINRECT(COORDS, buttonBox.x, buttonBox.y, buttonBox.x + buttonBox.w, buttonBox.y + buttonBox.h);
 
         if (hover != m_bButtonHovered) {
             m_bButtonHovered = hover;

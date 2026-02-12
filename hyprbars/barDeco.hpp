@@ -90,6 +90,9 @@ class CHyprBar : public IHyprWindowDecoration {
     void                      handleMovement();
     bool doButtonPress(Hyprlang::INT* const* PBARPADDING, Hyprlang::INT* const* PBARBUTTONPADDING, Hyprlang::INT* const* PHEIGHT, Vector2D COORDS, bool BUTTONSRIGHT);
 
+    CBox                      computeBarBox(const Vector2D& barSize, const float contentSize, const float edgeOffset, const float buttonPadding, const bool buttonsRight);
+    float                     computeContentY(const float barHeight, const float contentHeight);
+
     CBox assignedBoxGlobal();
 
     SP<HOOK_CALLBACK_FN> m_pMouseButtonCallback;
