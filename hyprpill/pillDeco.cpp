@@ -48,6 +48,9 @@ CHyprPill::CHyprPill(PHLWINDOW pWindow) : IHyprWindowDecoration(pWindow), m_pWin
 }
 
 CHyprPill::~CHyprPill() {
+    if (g_pGlobalState && g_pGlobalState->dragPill.get() == this)
+        g_pGlobalState->dragPill.reset();
+
     HyprlandAPI::unregisterCallback(PHANDLE, m_pMouseButtonCallback);
     HyprlandAPI::unregisterCallback(PHANDLE, m_pTouchDownCallback);
     HyprlandAPI::unregisterCallback(PHANDLE, m_pTouchUpCallback);
@@ -220,6 +223,9 @@ bool CHyprPill::inputIsValid() {
 }
 
 void CHyprPill::beginDrag(SCallbackInfo& info, const Vector2D& coords) {
+    if (!g_pGlobalState->dragPill.expired() && g_pGlobalState->dragPill.get() != this)
+        return;
+
     const auto clickHitbox = clickHitboxGlobal();
     if (!VECINRECT(coords, 0, 0, clickHitbox.w, clickHitbox.h))
         return;
@@ -237,6 +243,7 @@ void CHyprPill::beginDrag(SCallbackInfo& info, const Vector2D& coords) {
     info.cancelled   = true;
     m_cancelledDown  = true;
     m_dragPending    = true;
+    g_pGlobalState->dragPill = m_self;
     m_targetState    = ePillVisualState::PRESSED;
     m_stateStart     = Time::steadyNow();
     damageEntire();
@@ -258,6 +265,9 @@ void CHyprPill::endDrag(SCallbackInfo& info) {
     m_draggingThis = false;
     m_touchEv      = false;
     m_touchId      = 0;
+
+    if (g_pGlobalState->dragPill.get() == this)
+        g_pGlobalState->dragPill.reset();
 }
 
 void CHyprPill::onMouseButton(SCallbackInfo& info, IPointer::SButtonEvent e) {
@@ -293,6 +303,12 @@ void CHyprPill::onTouchUp(SCallbackInfo& info, ITouch::SUpEvent e) {
 }
 
 void CHyprPill::onMouseMove(SCallbackInfo& info, Vector2D coords) {
+    const bool dragOwnedByOtherPill = !g_pGlobalState->dragPill.expired() && g_pGlobalState->dragPill.get() != this;
+    if (dragOwnedByOtherPill) {
+        m_hovered = false;
+        return;
+    }
+
     if (!inputIsValid()) {
         m_hovered = false;
         return;
@@ -302,17 +318,22 @@ void CHyprPill::onMouseMove(SCallbackInfo& info, Vector2D coords) {
     m_hovered     = VECINRECT(coords, hb.x, hb.y, hb.x + hb.w, hb.y + hb.h);
 
     if (m_hovered) {
-        if (Desktop::focusState()->window() != m_pWindow.lock())
+        if (!m_dragPending && !m_draggingThis && Desktop::focusState()->window() != m_pWindow.lock())
             Desktop::focusState()->fullWindowFocus(m_pWindow.lock());
 
-        info.cancelled = true;
+        if (!m_dragPending && !m_draggingThis)
+            info.cancelled = true;
     }
 
     if (!m_dragPending || m_touchEv || !validMapped(m_pWindow))
         return;
 
+    if (Desktop::focusState()->window() != m_pWindow.lock())
+        Desktop::focusState()->fullWindowFocus(m_pWindow.lock());
+
     m_dragPending  = false;
     m_draggingThis = true;
+    info.cancelled = true;
     g_pKeybindManager->m_dispatchers["mouse"]("1movewindow");
 }
 
