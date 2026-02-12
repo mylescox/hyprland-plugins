@@ -50,9 +50,10 @@ class CHyprPill : public IHyprWindowDecoration {
     void                      onMouseMove(SCallbackInfo& info, Vector2D coords);
     void                      onTouchMove(SCallbackInfo& info, ITouch::SMotionEvent e);
 
-    void                      beginDrag(SCallbackInfo& info, const Vector2D& coords);
+    void                      beginDrag(SCallbackInfo& info, const Vector2D& coordsGlobal);
     void                      endDrag(SCallbackInfo& info);
     void                      updateStateAndAnimate();
+    void                      updateDragPosition(const Vector2D& coordsGlobal);
     bool                      inputIsValid();
     Vector2D                  cursorRelativeToPill() const;
     bool                      isHovering() const;
@@ -68,6 +69,7 @@ class CHyprPill : public IHyprWindowDecoration {
     bool                      m_cancelledDown   = false;
     bool                      m_hovered         = false;
     int                       m_touchId         = 0;
+    Vector2D                  m_dragCursorOffset;
 
     ePillVisualState          m_currentState    = ePillVisualState::INACTIVE;
     ePillVisualState          m_targetState     = ePillVisualState::INACTIVE;
