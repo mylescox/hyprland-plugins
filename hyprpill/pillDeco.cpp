@@ -248,7 +248,7 @@ CBox CHyprPill::visibleBoxGlobal() const {
     const auto WORKSPACEOFFSET = PWORKSPACE && !owner->m_pinned ? PWORKSPACE->m_renderOffset->value() : Vector2D();
     box.translate(WORKSPACEOFFSET);
 
-    const float windowLeft = owner->m_realPosition->value().x + owner->m_floatingOffset.x + WORKSPACEOFFSET.x;
+    const float windowLeft = static_cast<float>(box.x);
     const float windowRight = windowLeft + std::max(1.F, static_cast<float>(owner->m_realSize->value().x));
     const float centerX = windowLeft + (windowRight - windowLeft) * 0.5F;
     const auto desiredWidth = std::max<int>(1, std::lround(m_width > 1.F ? m_width : **PWIDTH));
@@ -274,7 +274,8 @@ CBox CHyprPill::visibleBoxGlobal() const {
         const float hoverOffsetY   = **POFFY;
         const float occluderMargin = std::max<Hyprlang::INT>(0, **POCCMARGIN);
 
-        const float basePillY      = std::lround(box.y - box.h - m_offsetY);
+        const float ownerTop       = static_cast<float>(box.y);
+        const float basePillY      = std::lround(ownerTop - box.h - m_offsetY);
         const float hoverTop       = std::lround(basePillY - hoverHeightPad + hoverOffsetY);
         const float hoverBottom    = hoverTop + box.h + hoverHeightPad * 2.F;
 
@@ -300,14 +301,14 @@ CBox CHyprPill::visibleBoxGlobal() const {
             if (!overlapsHoverY)
                 continue;
 
-            // Only dodge when an occluder edge actually intersects the hover hitbox vertically.
-            const bool hasTouchingEdge = (candidateBottom >= hoverTop && candidateBottom <= hoverBottom) || (candidateTop >= hoverTop && candidateTop <= hoverBottom);
-            if (!hasTouchingEdge)
+            // Only dodge when a window edge actually touches the hover hitbox.
+            const bool edgeTouchesHover = (candidateBottom >= hoverTop && candidateBottom <= hoverBottom) || (candidateTop >= hoverTop && candidateTop <= hoverBottom);
+            if (!edgeTouchesHover)
                 continue;
 
-            // Require top-edge occlusion behavior so side-only overlaps do not trigger dodging.
-            const bool occludesFromTop = candidateBottom >= hoverTop && candidateBottom <= hoverBottom;
-            if (!occludesFromTop)
+            // Require overlap at the owner's top edge so side-only overlaps do not trigger dodging.
+            const bool occludesOwnerTopEdge = candidateTop < ownerTop && candidateBottom > ownerTop;
+            if (!occludesOwnerTopEdge)
                 continue;
 
             const float clippedLeft  = std::max(windowLeft, candidateLeft - occluderMargin);
