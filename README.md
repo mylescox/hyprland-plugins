@@ -6,6 +6,7 @@ This repo houses official plugins for Hyprland.
  - borders-plus-plus -> adds one or two additional borders to windows
  - csgo-vulkan-fix -> fixes custom resolutions on CS:GO with `-vulkan`
  - hyprbars -> adds title bars to windows
+ - hyprpill -> adds animated pill grabbers to windows
  - hyprexpo -> adds an expo-like workspace overview
  - hyprfocus -> flashfocus for hyprland
  - hyprscrolling -> adds a scrolling layout to hyprland

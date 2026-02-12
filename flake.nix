@@ -32,6 +32,7 @@
         borders-plus-plus
         csgo-vulkan-fix
         hyprbars
+        hyprpill
         hyprexpo
         hyprfocus
         hyprscrolling
@@ -54,6 +55,7 @@
             borders-plus-plus = callPackage ./borders-plus-plus {};
             csgo-vulkan-fix = callPackage ./csgo-vulkan-fix {};
             hyprbars = callPackage ./hyprbars {};
+            hyprpill = callPackage ./hyprpill {};
             hyprexpo = callPackage ./hyprexpo {};
             hyprfocus = callPackage ./hyprfocus {};
             hyprscrolling = callPackage ./hyprscrolling {};
