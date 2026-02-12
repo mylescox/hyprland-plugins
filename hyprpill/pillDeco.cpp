@@ -250,6 +250,7 @@ CBox CHyprPill::visibleBoxGlobal() const {
     static auto* const PHITH   = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:hover_hitbox_height")->getDataStaticPtr();
     static auto* const POFFY   = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:hover_hitbox_offset_y")->getDataStaticPtr();
     static auto* const POCCMARGIN = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:dodge_occluder_margin")->getDataStaticPtr();
+    static auto* const PDURHOVER = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:anim_duration_hover")->getDataStaticPtr();
 
     const auto owner = m_pWindow.lock();
     if (!owner)
@@ -444,15 +445,54 @@ CBox CHyprPill::visibleBoxGlobal() const {
     if (dodging)
         std::tie(resolvedCenter, resolvedWidth) = solveConstrained(resolvedWidth, dodging);
 
-    box.w = std::max<int>(1, std::lround(resolvedWidth));
-    box.x = std::clamp(static_cast<int>(std::lround(resolvedCenter - box.w / 2.F)), static_cast<int>(std::lround(windowLeft)),
-                       static_cast<int>(std::lround(windowRight - box.w)));
+    const int targetW = std::max<int>(1, std::lround(resolvedWidth));
+    const int targetX = std::clamp(static_cast<int>(std::lround(resolvedCenter - targetW / 2.F)), static_cast<int>(std::lround(windowLeft)),
+                                   static_cast<int>(std::lround(windowRight - targetW)));
+    const int targetY = std::lround(box.y - box.h - m_offsetY);
 
     m_lastFrameDodging   = dodging;
-    m_lastFrameResolvedX = box.x;
-    m_lastFrameResolvedW = box.w;
+    m_lastFrameResolvedX = targetX;
+    m_lastFrameResolvedW = targetW;
 
-    box.y              = std::lround(box.y - box.h - m_offsetY);
+    const bool activeDrag = m_dragPending || m_draggingThis;
+    if (activeDrag) {
+        m_geometryAnimInitialized = false;
+        box.w = targetW;
+        box.x = targetX;
+        box.y = targetY;
+        return box;
+    }
+
+    const auto  now = Time::steadyNow();
+    const float dtMs = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_geometryAnimLastTick).count();
+    m_geometryAnimLastTick = now;
+
+    if (!m_geometryAnimInitialized) {
+        m_geometryAnimInitialized = true;
+        m_geometryAnimX           = static_cast<float>(targetX);
+        m_geometryAnimY           = static_cast<float>(targetY);
+        m_geometryAnimW           = static_cast<float>(targetW);
+    } else {
+        const float durationMs = std::max<Hyprlang::INT>(1, **PDURHOVER);
+        const float t          = std::clamp(dtMs / durationMs, 0.F, 1.F);
+        const float easedT     = easeInOut(t);
+
+        m_geometryAnimX = lerpf(m_geometryAnimX, static_cast<float>(targetX), easedT);
+        m_geometryAnimY = lerpf(m_geometryAnimY, static_cast<float>(targetY), easedT);
+        m_geometryAnimW = lerpf(m_geometryAnimW, static_cast<float>(targetW), easedT);
+
+        if (std::abs(m_geometryAnimX - targetX) < 0.5F)
+            m_geometryAnimX = static_cast<float>(targetX);
+        if (std::abs(m_geometryAnimY - targetY) < 0.5F)
+            m_geometryAnimY = static_cast<float>(targetY);
+        if (std::abs(m_geometryAnimW - targetW) < 0.5F)
+            m_geometryAnimW = static_cast<float>(targetW);
+    }
+
+    box.w = std::max<int>(1, std::lround(m_geometryAnimW));
+    box.x = std::clamp(static_cast<int>(std::lround(m_geometryAnimX)), static_cast<int>(std::lround(windowLeft)),
+                       static_cast<int>(std::lround(windowRight - box.w)));
+    box.y = std::lround(m_geometryAnimY);
     return box;
 }
 

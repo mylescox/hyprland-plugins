@@ -103,6 +103,12 @@ class CHyprPill : public IHyprWindowDecoration {
     mutable bool              m_lastFrameDodging     = false;
     mutable int               m_lastFrameResolvedX   = 0;
     mutable int               m_lastFrameResolvedW   = 0;
+
+    mutable bool              m_geometryAnimInitialized = false;
+    mutable float             m_geometryAnimX           = 0.F;
+    mutable float             m_geometryAnimY           = 0.F;
+    mutable float             m_geometryAnimW           = 0.F;
+    mutable Time::steady_tp   m_geometryAnimLastTick    = Time::steadyNow();
     bool                      m_dragGeometryLocked   = false;
     int                       m_dragLockedResolvedX  = 0;
     int                       m_dragLockedResolvedW  = 0;
