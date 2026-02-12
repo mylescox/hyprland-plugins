@@ -249,7 +249,7 @@ CBox CHyprPill::visibleBoxGlobal() const {
     box.translate(WORKSPACEOFFSET);
 
     const float windowLeft = owner->m_realPosition->value().x + owner->m_floatingOffset.x + WORKSPACEOFFSET.x;
-    const float windowRight = windowLeft + std::max(1.F, owner->m_realSize->value().x);
+    const float windowRight = windowLeft + std::max(1.F, static_cast<float>(owner->m_realSize->value().x));
     const float centerX = windowLeft + (windowRight - windowLeft) * 0.5F;
     const auto desiredWidth = std::max<int>(1, std::lround(m_width > 1.F ? m_width : **PWIDTH));
     box.w = std::min<int>(desiredWidth, std::max<int>(1, static_cast<int>(std::lround(windowRight - windowLeft))));
