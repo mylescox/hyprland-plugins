@@ -37,6 +37,17 @@ float easeInOut(float t) {
     return t < 0.5F ? 2.F * t * t : 1.F - std::pow(-2.F * t + 2.F, 2.F) * 0.5F;
 }
 
+float applyNamedEasing(float t, const std::string& easing) {
+    if (easing == "linear")
+        return t;
+    if (easing == "easeOut")
+        return 1.F - std::pow(1.F - t, 2.F);
+    if (easing == "easeIn")
+        return t * t;
+
+    return easeInOut(t);
+}
+
 struct SHorizontalInterval {
     float start = 0.F;
     float end   = 0.F;
@@ -250,7 +261,8 @@ CBox CHyprPill::visibleBoxGlobal() const {
     static auto* const PHITH   = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:hover_hitbox_height")->getDataStaticPtr();
     static auto* const POFFY   = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:hover_hitbox_offset_y")->getDataStaticPtr();
     static auto* const POCCMARGIN = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:dodge_occluder_margin")->getDataStaticPtr();
-    static auto* const PDURHOVER = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:anim_duration_hover")->getDataStaticPtr();
+    static auto* const PGEOMLERPSPEED = (Hyprlang::FLOAT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:geometry_lerp_speed")->getDataStaticPtr();
+    static auto* const PGEOMLERPEASING = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:geometry_lerp_easing")->getDataStaticPtr();
 
     const auto owner = m_pWindow.lock();
     if (!owner)
@@ -446,9 +458,9 @@ CBox CHyprPill::visibleBoxGlobal() const {
         std::tie(resolvedCenter, resolvedWidth) = solveConstrained(resolvedWidth, dodging);
 
     const int targetW = std::max<int>(1, std::lround(resolvedWidth));
+    const int targetH = std::max<int>(1, std::lround(m_height));
     const int targetX = std::clamp(static_cast<int>(std::lround(resolvedCenter - targetW / 2.F)), static_cast<int>(std::lround(windowLeft)),
                                    static_cast<int>(std::lround(windowRight - targetW)));
-    const int targetY = std::lround(box.y - box.h - m_offsetY);
 
     m_lastFrameDodging   = dodging;
     m_lastFrameResolvedX = targetX;
@@ -458,8 +470,9 @@ CBox CHyprPill::visibleBoxGlobal() const {
     if (activeDrag) {
         m_geometryAnimInitialized = false;
         box.w = targetW;
+        box.h = targetH;
         box.x = targetX;
-        box.y = targetY;
+        box.y = std::lround(box.y - box.h - m_offsetY);
         return box;
     }
 
@@ -470,29 +483,31 @@ CBox CHyprPill::visibleBoxGlobal() const {
     if (!m_geometryAnimInitialized) {
         m_geometryAnimInitialized = true;
         m_geometryAnimX           = static_cast<float>(targetX);
-        m_geometryAnimY           = static_cast<float>(targetY);
         m_geometryAnimW           = static_cast<float>(targetW);
+        m_geometryAnimH           = static_cast<float>(targetH);
     } else {
-        const float durationMs = std::max<Hyprlang::INT>(1, **PDURHOVER);
-        const float t          = std::clamp(dtMs / durationMs, 0.F, 1.F);
-        const float easedT     = easeInOut(t);
+        const float lerpSpeed = std::max(0.01F, **PGEOMLERPSPEED);
+        const float dtSeconds = std::max(0.F, dtMs) / 1000.F;
+        const float t         = std::clamp(dtSeconds * lerpSpeed, 0.F, 1.F);
+        const float easedT    = applyNamedEasing(t, std::string{*PGEOMLERPEASING});
 
         m_geometryAnimX = lerpf(m_geometryAnimX, static_cast<float>(targetX), easedT);
-        m_geometryAnimY = lerpf(m_geometryAnimY, static_cast<float>(targetY), easedT);
         m_geometryAnimW = lerpf(m_geometryAnimW, static_cast<float>(targetW), easedT);
+        m_geometryAnimH = lerpf(m_geometryAnimH, static_cast<float>(targetH), easedT);
 
         if (std::abs(m_geometryAnimX - targetX) < 0.5F)
             m_geometryAnimX = static_cast<float>(targetX);
-        if (std::abs(m_geometryAnimY - targetY) < 0.5F)
-            m_geometryAnimY = static_cast<float>(targetY);
         if (std::abs(m_geometryAnimW - targetW) < 0.5F)
             m_geometryAnimW = static_cast<float>(targetW);
+        if (std::abs(m_geometryAnimH - targetH) < 0.5F)
+            m_geometryAnimH = static_cast<float>(targetH);
     }
 
     box.w = std::max<int>(1, std::lround(m_geometryAnimW));
+    box.h = std::max<int>(1, std::lround(m_geometryAnimH));
     box.x = std::clamp(static_cast<int>(std::lround(m_geometryAnimX)), static_cast<int>(std::lround(windowLeft)),
                        static_cast<int>(std::lround(windowRight - box.w)));
-    box.y = std::lround(m_geometryAnimY);
+    box.y = std::lround(box.y - box.h - m_offsetY);
     return box;
 }
 
