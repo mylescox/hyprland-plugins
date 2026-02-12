@@ -238,7 +238,6 @@ CBox CHyprPill::visibleBoxGlobal() const {
     static auto* const PWIDTH  = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:pill_width")->getDataStaticPtr();
     static auto* const PHITW   = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:hover_hitbox_width")->getDataStaticPtr();
     static auto* const PHITH   = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:hover_hitbox_height")->getDataStaticPtr();
-    static auto* const PWIDTHHOVER = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:pill_width_hover")->getDataStaticPtr();
     static auto* const POFFY   = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:hover_hitbox_offset_y")->getDataStaticPtr();
     static auto* const POCCMARGIN = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:dodge_occluder_margin")->getDataStaticPtr();
 
@@ -306,33 +305,26 @@ CBox CHyprPill::visibleBoxGlobal() const {
             const float candidateRight  = candidateLeft + candidateSize.x;
             const float candidateBottom = candidateTop + candidateSize.y;
 
+            const bool overlapsHoverX = candidateRight > hoverLeft && candidateLeft < hoverRight;
             const bool overlapsHoverY = candidateBottom > hoverTop && candidateTop < hoverBottom;
-            if (!overlapsHoverY)
+            if (!overlapsHoverX || !overlapsHoverY)
                 continue;
 
-            // Only dodge when at least one occluder edge touches the hover hitbox.
-            const bool edgeTouchesHover =
+            // Treat as a valid occluder when either rectangle contributes an edge inside the other.
+            // This handles the fully-covered-hover case where candidate edges never fall inside hover bounds.
+            const bool candidateEdgeTouchesHover =
                 (candidateBottom >= hoverTop && candidateBottom <= hoverBottom) || (candidateTop >= hoverTop && candidateTop <= hoverBottom) ||
                 (candidateRight >= hoverLeft && candidateRight <= hoverRight) || (candidateLeft >= hoverLeft && candidateLeft <= hoverRight);
-            if (!edgeTouchesHover)
+            const bool hoverEdgeTouchesCandidate =
+                (hoverBottom >= candidateTop && hoverBottom <= candidateBottom) || (hoverTop >= candidateTop && hoverTop <= candidateBottom) ||
+                (hoverRight >= candidateLeft && hoverRight <= candidateRight) || (hoverLeft >= candidateLeft && hoverLeft <= candidateRight);
+
+            if (!candidateEdgeTouchesHover && !hoverEdgeTouchesCandidate)
                 continue;
 
             const float clippedLeft  = std::max(windowLeft, candidateLeft - occluderMargin);
             const float clippedRight = std::min(windowRight, candidateRight + occluderMargin);
             if (clippedRight <= clippedLeft)
-                continue;
-
-            // Ignore occluders that are behind the owner window at the overlap sample.
-            const float sampleX = std::clamp((clippedLeft + clippedRight) * 0.5F, windowLeft + 0.5F, windowRight - 0.5F);
-            const float sampleY = (candidateBottom - candidateTop) > 1.F ? std::clamp((hoverTop + hoverBottom) * 0.5F, candidateTop + 0.5F, candidateBottom - 0.5F)
-                                                                           : (candidateTop + candidateBottom) * 0.5F;
-            const Vector2D samplePoint{sampleX, sampleY};
-            const auto topWindowAtSample = g_pCompositor->vectorToWindowUnified(
-                samplePoint, Desktop::View::RESERVED_EXTENTS | Desktop::View::INPUT_EXTENTS | Desktop::View::ALLOW_FLOATING);
-            if (topWindowAtSample != candidate)
-                continue;
-
-            if (owner->m_isFloating && !candidate->m_isFloating)
                 continue;
 
             occluders.push_back({clippedLeft, clippedRight});
@@ -424,12 +416,8 @@ CBox CHyprPill::visibleBoxGlobal() const {
         return std::pair{resolvedCenter, std::min(width, maxWidth)};
     };
 
-    const float animatedWidth = static_cast<float>(box.w);
-    const float hoverFloorWidth = std::max(1.F, static_cast<float>(**PWIDTHHOVER));
-    const float widthForOcclusion = std::max(animatedWidth, hoverFloorWidth);
-
     bool dodging = false;
-    auto [resolvedCenter, resolvedWidth] = solveConstrained(widthForOcclusion, dodging);
+    auto [resolvedCenter, resolvedWidth] = solveConstrained(static_cast<float>(box.w), dodging);
     std::tie(resolvedCenter, resolvedWidth) = solveConstrained(resolvedWidth, dodging);
 
     box.w = std::max<int>(1, std::lround(resolvedWidth));
