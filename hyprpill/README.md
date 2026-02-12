@@ -31,6 +31,9 @@ plugin {
     debug_hitbox_hover = false
     debug_hitbox_click = false
 
+    hover_cursor = grab
+    grab_cursor = grabbing
+
     pill_color_active = rgba(99ccffff)
     pill_color_inactive = rgba(777777cc)
     pill_color_hover = rgba(bbe6ffff)
@@ -76,6 +79,8 @@ All config options are in `plugin:hyprpill`.
 | `click_hitbox_offset_y` | int | click hitbox y offset from visible pill | `0` |
 | `debug_hitbox_hover` | bool | draw hover hitbox overlay for tuning | `false` |
 | `debug_hitbox_click` | bool | draw click hitbox overlay for tuning | `false` |
+| `hover_cursor` | str | cursor shape name while hovering click hitbox (`""` to disable override) | `grab` |
+| `grab_cursor` | str | cursor shape name while click/drag is active (`""` to disable override) | `grabbing` |
 | `pill_color_active` | color | active/focused color | `rgba(99ccffff)` |
 | `pill_color_inactive` | color | inactive color | `rgba(777777cc)` |
 | `pill_color_hover` | color | hover color | `rgba(bbe6ffff)` |

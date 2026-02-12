@@ -382,13 +382,19 @@ void CHyprPill::updateCursorShape(const std::optional<Vector2D>& coords) {
     if (!g_pGlobalState || !Cursor::overrideController)
         return;
 
+    static auto* const PHOVERCURSOR = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:hover_cursor")->getDataStaticPtr();
+    static auto* const PGRABCURSOR  = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:grab_cursor")->getDataStaticPtr();
+
     for (auto& p : g_pGlobalState->pills) {
         const auto PPILL = p.lock();
         if (!PPILL)
             continue;
 
         if (PPILL->m_dragPending || PPILL->m_draggingThis) {
-            Cursor::overrideController->setOverride("grabbing", Cursor::CURSOR_OVERRIDE_UNKNOWN);
+            if (!PGRABCURSOR->empty())
+                Cursor::overrideController->setOverride(*PGRABCURSOR, Cursor::CURSOR_OVERRIDE_UNKNOWN);
+            else
+                Cursor::overrideController->unsetOverride(Cursor::CURSOR_OVERRIDE_UNKNOWN);
             return;
         }
     }
@@ -401,7 +407,10 @@ void CHyprPill::updateCursorShape(const std::optional<Vector2D>& coords) {
 
         const auto HB = PPILL->clickHitboxGlobal();
         if (VECINRECT(COORDS, HB.x, HB.y, HB.x + HB.w, HB.y + HB.h)) {
-            Cursor::overrideController->setOverride("grab", Cursor::CURSOR_OVERRIDE_UNKNOWN);
+            if (!PHOVERCURSOR->empty())
+                Cursor::overrideController->setOverride(*PHOVERCURSOR, Cursor::CURSOR_OVERRIDE_UNKNOWN);
+            else
+                Cursor::overrideController->unsetOverride(Cursor::CURSOR_OVERRIDE_UNKNOWN);
             return;
         }
     }
