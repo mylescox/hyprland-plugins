@@ -31,6 +31,18 @@ steps = [
     "make -C hyprbars all",
 ]
 
+
+[hyprpill]
+description = "A plugin to add animated pill grabbers to windows"
+version = "1.0"
+authors = ["Vaxry"]
+
+[hyprpill.build]
+output = "hyprpill/hyprpill.so"
+steps = [
+    "make -C hyprpill all",
+]
+
 [hyprtrails]
 description = "A plugin to add trails behind moving windows"
 version = "1.0"
