@@ -53,6 +53,7 @@ class CHyprPill : public IHyprWindowDecoration {
     void                      beginDrag(SCallbackInfo& info, const Vector2D& coords);
     void                      endDrag(SCallbackInfo& info);
     void                      updateStateAndAnimate();
+    void                      updateDragPosition(const Vector2D& coords);
     bool                      inputIsValid();
     Vector2D                  cursorRelativeToPill() const;
     bool                      isHovering() const;
