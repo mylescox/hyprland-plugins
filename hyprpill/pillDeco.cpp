@@ -12,6 +12,7 @@
 #include <hyprland/src/managers/KeybindManager.hpp>
 #include <hyprland/src/managers/SeatManager.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
+#include <hyprland/src/managers/cursor/CursorShapeOverrideController.hpp>
 #include <hyprland/src/render/OpenGL.hpp>
 #include <hyprland/src/render/Renderer.hpp>
 
@@ -45,6 +46,7 @@ CHyprPill::CHyprPill(PHLWINDOW pWindow) : IHyprWindowDecoration(pWindow), m_pWin
         PHANDLE, "mouseMove", [&](void* self, SCallbackInfo& info, std::any param) { onMouseMove(info, std::any_cast<Vector2D>(param)); });
 
     updateStateAndAnimate();
+    updateCursorShape();
 }
 
 CHyprPill::~CHyprPill() {
@@ -57,6 +59,7 @@ CHyprPill::~CHyprPill() {
     HyprlandAPI::unregisterCallback(PHANDLE, m_pTouchMoveCallback);
     HyprlandAPI::unregisterCallback(PHANDLE, m_pMouseMoveCallback);
     std::erase(g_pGlobalState->pills, m_self);
+    updateCursorShape();
 }
 
 SDecorationPositioningInfo CHyprPill::getPositioningInfo() {
@@ -249,6 +252,7 @@ void CHyprPill::beginDrag(SCallbackInfo& info, const Vector2D& coordsGlobal) {
     m_targetState    = ePillVisualState::PRESSED;
     m_stateStart     = Time::steadyNow();
     damageEntire();
+    updateCursorShape();
 }
 
 void CHyprPill::endDrag(SCallbackInfo& info) {
@@ -267,11 +271,15 @@ void CHyprPill::endDrag(SCallbackInfo& info) {
 
     if (g_pGlobalState->dragPill.get() == this)
         g_pGlobalState->dragPill.reset();
+
+    updateCursorShape();
 }
 
 void CHyprPill::onMouseButton(SCallbackInfo& info, IPointer::SButtonEvent e) {
-    if (!inputIsValid())
+    if (!inputIsValid()) {
+        updateCursorShape();
         return;
+    }
 
     if (e.state != WL_POINTER_BUTTON_STATE_PRESSED) {
         endDrag(info);
@@ -305,11 +313,20 @@ void CHyprPill::onMouseMove(SCallbackInfo& info, Vector2D coords) {
     const bool dragOwnedByOtherPill = !g_pGlobalState->dragPill.expired() && g_pGlobalState->dragPill.get() != this;
     if (dragOwnedByOtherPill) {
         m_hovered = false;
+        updateCursorShape();
         return;
     }
 
     if (!inputIsValid()) {
         m_hovered = false;
+        updateCursorShape();
+        return;
+    }
+
+    if (m_draggingThis) {
+        info.cancelled = true;
+        updateDragPosition(coords);
+        updateCursorShape();
         return;
     }
 
@@ -330,8 +347,13 @@ void CHyprPill::onMouseMove(SCallbackInfo& info, Vector2D coords) {
             info.cancelled = true;
     }
 
-    if (!m_dragPending || m_touchEv || !validMapped(m_pWindow))
+    if (!m_dragPending || m_touchEv || !validMapped(m_pWindow)) {
+        updateCursorShape();
         return;
+    }
+
+    if (Desktop::focusState()->window() != m_pWindow.lock())
+        Desktop::focusState()->fullWindowFocus(m_pWindow.lock());
 
     if (Desktop::focusState()->window() != m_pWindow.lock())
         Desktop::focusState()->fullWindowFocus(m_pWindow.lock());
@@ -339,6 +361,7 @@ void CHyprPill::onMouseMove(SCallbackInfo& info, Vector2D coords) {
     m_dragPending  = false;
     info.cancelled = true;
     updateDragPosition(coords);
+    updateCursorShape();
 }
 
 void CHyprPill::onTouchMove(SCallbackInfo& info, ITouch::SMotionEvent e) {
@@ -362,6 +385,37 @@ void CHyprPill::updateDragPosition(const Vector2D& coordsGlobal) {
     const auto targetPos = coordsGlobal - m_dragCursorOffset;
     g_pKeybindManager->m_dispatchers["movewindowpixel"](std::format("exact {} {},activewindow", (int)targetPos.x, (int)targetPos.y));
     m_draggingThis = true;
+}
+
+void CHyprPill::updateCursorShape() {
+    if (!g_pGlobalState || !Cursor::overrideController)
+        return;
+
+    for (auto& p : g_pGlobalState->pills) {
+        const auto PPILL = p.lock();
+        if (!PPILL)
+            continue;
+
+        if (PPILL->m_dragPending || PPILL->m_draggingThis) {
+            Cursor::overrideController->setOverride("grabbing", Cursor::CURSOR_OVERRIDE_UNKNOWN);
+            return;
+        }
+    }
+
+    const auto COORDS = g_pInputManager->getMouseCoordsInternal();
+    for (auto& p : g_pGlobalState->pills) {
+        const auto PPILL = p.lock();
+        if (!PPILL || !PPILL->inputIsValid())
+            continue;
+
+        const auto HB = PPILL->clickHitboxGlobal();
+        if (VECINRECT(COORDS, HB.x, HB.y, HB.x + HB.w, HB.y + HB.h)) {
+            Cursor::overrideController->setOverride("grab", Cursor::CURSOR_OVERRIDE_UNKNOWN);
+            return;
+        }
+    }
+
+    Cursor::overrideController->unsetOverride(Cursor::CURSOR_OVERRIDE_UNKNOWN);
 }
 
 void CHyprPill::updateStateAndAnimate() {
