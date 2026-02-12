@@ -285,17 +285,16 @@ CBox CHyprPill::visibleBoxGlobal() const {
 
     const bool canDetectOccluders = owner->m_workspace && owner->m_workspace->isVisible();
     if (canDetectOccluders) {
-        const float hoverWidthPad  = std::max<Hyprlang::INT>(0, **PHITW);
         const float hoverHeightPad = std::max<Hyprlang::INT>(0, **PHITH);
         const float hoverOffsetY   = **POFFY;
         const float occluderMargin = std::max<Hyprlang::INT>(0, **POCCMARGIN);
 
-        const float ownerTop       = static_cast<float>(box.y);
-        const float basePillY      = std::lround(ownerTop - box.h - m_offsetY);
-        const float hoverLeft      = std::lround((centerX - box.w / 2.F) - hoverWidthPad);
-        const float hoverRight     = std::lround((centerX + box.w / 2.F) + hoverWidthPad);
-        const float hoverTop       = std::lround(basePillY - hoverHeightPad + hoverOffsetY);
-        const float hoverBottom    = hoverTop + box.h + hoverHeightPad * 2.F;
+        const float ownerTop         = static_cast<float>(box.y);
+        const float basePillY        = std::lround(ownerTop - box.h - m_offsetY);
+        const float occlusionLeft    = windowLeft;
+        const float occlusionRight   = windowRight;
+        const float occlusionTop     = std::lround(basePillY - hoverHeightPad + hoverOffsetY);
+        const float occlusionBottom  = occlusionTop + box.h + hoverHeightPad * 2.F;
 
         for (const auto& candidate : g_pCompositor->m_windows) {
             if (!candidate || candidate == owner || candidate->isHidden() || !candidate->m_isMapped)
@@ -307,7 +306,7 @@ CBox CHyprPill::visibleBoxGlobal() const {
             if (candidate->m_monitor != owner->m_monitor)
                 continue;
 
-            const auto candidatePos = candidate->m_realPosition->value() + candidate->m_floatingOffset;
+            const auto candidatePos  = candidate->m_realPosition->value() + candidate->m_floatingOffset;
             const auto candidateSize = candidate->m_realSize->value();
 
             const float candidateLeft   = candidatePos.x;
@@ -315,21 +314,14 @@ CBox CHyprPill::visibleBoxGlobal() const {
             const float candidateRight  = candidateLeft + candidateSize.x;
             const float candidateBottom = candidateTop + candidateSize.y;
 
-            const bool overlapsHoverX = candidateRight > hoverLeft && candidateLeft < hoverRight;
-            const bool overlapsHoverY = candidateBottom > hoverTop && candidateTop < hoverBottom;
-            if (!overlapsHoverX || !overlapsHoverY)
+            const bool overlapsOcclusionX = candidateRight > occlusionLeft && candidateLeft < occlusionRight;
+            const bool overlapsOcclusionY = candidateBottom > occlusionTop && candidateTop < occlusionBottom;
+            if (!overlapsOcclusionX || !overlapsOcclusionY)
                 continue;
 
-            // Treat as a valid occluder when either rectangle contributes an edge inside the other.
-            // This handles the fully-covered-hover case where candidate edges never fall inside hover bounds.
-            const bool candidateEdgeTouchesHover =
-                (candidateBottom >= hoverTop && candidateBottom <= hoverBottom) || (candidateTop >= hoverTop && candidateTop <= hoverBottom) ||
-                (candidateRight >= hoverLeft && candidateRight <= hoverRight) || (candidateLeft >= hoverLeft && candidateLeft <= hoverRight);
-            const bool hoverEdgeTouchesCandidate =
-                (hoverBottom >= candidateTop && hoverBottom <= candidateBottom) || (hoverTop >= candidateTop && hoverTop <= candidateBottom) ||
-                (hoverRight >= candidateLeft && hoverRight <= candidateRight) || (hoverLeft >= candidateLeft && hoverLeft <= candidateRight);
-
-            if (!candidateEdgeTouchesHover && !hoverEdgeTouchesCandidate)
+            // Only windows crossing the owner's top edge are considered occluders.
+            const bool overlapsOwnerTopEdge = candidateTop < ownerTop && candidateBottom > ownerTop;
+            if (!overlapsOwnerTopEdge)
                 continue;
 
             const float clippedLeft  = std::max(windowLeft, candidateLeft - occluderMargin);
@@ -337,16 +329,15 @@ CBox CHyprPill::visibleBoxGlobal() const {
             if (clippedRight <= clippedLeft)
                 continue;
 
-            const float overlapLeft  = std::max(hoverLeft, candidateLeft);
-            const float overlapRight = std::min(hoverRight, candidateRight);
-            const float overlapTop   = std::max(hoverTop, candidateTop);
-            const float overlapBottom = std::min(hoverBottom, candidateBottom);
-
+            const float overlapLeft   = std::max(occlusionLeft, candidateLeft);
+            const float overlapRight  = std::min(occlusionRight, candidateRight);
+            const float overlapTop    = std::max(occlusionTop, candidateTop);
+            const float overlapBottom = std::min(occlusionBottom, candidateBottom);
             if (overlapRight <= overlapLeft || overlapBottom <= overlapTop)
                 continue;
 
             const Vector2D overlapSample{(overlapLeft + overlapRight) * 0.5F, (overlapTop + overlapBottom) * 0.5F};
-            const auto topWindowAtOverlap = g_pCompositor->vectorToWindowUnified(
+            const auto     topWindowAtOverlap = g_pCompositor->vectorToWindowUnified(
                 overlapSample, Desktop::View::RESERVED_EXTENTS | Desktop::View::INPUT_EXTENTS | Desktop::View::ALLOW_FLOATING);
             if (topWindowAtOverlap != candidate)
                 continue;
