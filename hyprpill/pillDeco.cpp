@@ -1,7 +1,9 @@
 #include "pillDeco.hpp"
 
 #include <algorithm>
+#include <linux/input-event-codes.h>
 #include <cmath>
+#include <chrono>
 #include <format>
 #include <string>
 #include <hyprland/src/Compositor.hpp>
@@ -309,6 +311,61 @@ void CHyprPill::endDrag(SCallbackInfo& info) {
     updateCursorShape();
 }
 
+bool CHyprPill::focusAndDispatchToWindow(const std::string& dispatcher, const std::string& arg) {
+    const auto PWINDOW = m_pWindow.lock();
+    if (!PWINDOW)
+        return false;
+
+    if (Desktop::focusState()->window() != PWINDOW)
+        Desktop::focusState()->fullWindowFocus(PWINDOW);
+
+    g_pKeybindManager->m_dispatchers[dispatcher](arg);
+    return true;
+}
+
+bool CHyprPill::handlePillClickAction(SCallbackInfo& info, uint32_t button) {
+    const auto PWINDOW = m_pWindow.lock();
+    if (!PWINDOW)
+        return false;
+
+    if (button == BTN_MIDDLE) {
+        info.cancelled = true;
+        return focusAndDispatchToWindow("killactive");
+    }
+
+    if (button == BTN_RIGHT) {
+        if (PWINDOW->m_isFloating)
+            return false;
+
+        info.cancelled = true;
+        return focusAndDispatchToWindow("pseudo");
+    }
+
+    if (button != BTN_LEFT)
+        return false;
+
+    static auto* const PDOUBLECLICKTIMEOUT = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:double_click_timeout")->getDataStaticPtr();
+    const auto         now                  = Time::steadyNow();
+    const auto timeoutMs = std::max<Hyprlang::INT>(0, **PDOUBLECLICKTIMEOUT);
+
+    if (std::chrono::duration_cast<std::chrono::milliseconds>(now - m_lastLeftDown).count() <= timeoutMs) {
+        m_lastLeftDown  = now - std::chrono::milliseconds(timeoutMs + 1);
+        m_dragPending   = false;
+        m_draggingThis  = false;
+        m_cancelledDown = false;
+        m_forceFloatForDrag = false;
+        if (g_pGlobalState->dragPill.get() == this)
+            g_pGlobalState->dragPill.reset();
+
+        info.cancelled = true;
+        updateCursorShape();
+        return focusAndDispatchToWindow("togglefloating");
+    }
+
+    m_lastLeftDown = now;
+    return false;
+}
+
 void CHyprPill::onMouseButton(SCallbackInfo& info, IPointer::SButtonEvent e) {
     if (e.state != WL_POINTER_BUTTON_STATE_PRESSED) {
         endDrag(info);
@@ -320,7 +377,20 @@ void CHyprPill::onMouseButton(SCallbackInfo& info, IPointer::SButtonEvent e) {
         return;
     }
 
-    beginDrag(info, g_pInputManager->getMouseCoordsInternal());
+    const auto coordsGlobal = g_pInputManager->getMouseCoordsInternal();
+    const auto clickHitbox  = clickHitboxGlobal();
+    if (!VECINRECT(coordsGlobal, clickHitbox.x, clickHitbox.y, clickHitbox.x + clickHitbox.w, clickHitbox.y + clickHitbox.h)) {
+        updateCursorShape(coordsGlobal);
+        return;
+    }
+
+    if (handlePillClickAction(info, e.button))
+        return;
+
+    if (e.button != BTN_LEFT)
+        return;
+
+    beginDrag(info, coordsGlobal);
 }
 
 void CHyprPill::onTouchDown(SCallbackInfo& info, ITouch::SDownEvent e) {
