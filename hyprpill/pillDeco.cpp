@@ -6,6 +6,8 @@
 #include <chrono>
 #include <format>
 #include <string>
+#include <tuple>
+#include <vector>
 #include <hyprland/src/Compositor.hpp>
 #include <hyprland/src/config/ConfigManager.hpp>
 #include <hyprland/src/desktop/rule/windowRule/WindowRule.hpp>
@@ -33,6 +35,51 @@ CHyprColor lerpColor(const CHyprColor& a, const CHyprColor& b, float t) {
 
 float easeInOut(float t) {
     return t < 0.5F ? 2.F * t * t : 1.F - std::pow(-2.F * t + 2.F, 2.F) * 0.5F;
+}
+
+struct SHorizontalInterval {
+    float start = 0.F;
+    float end   = 0.F;
+};
+
+bool intervalsOverlap(const SHorizontalInterval& a, const SHorizontalInterval& b) {
+    return a.start < b.end && b.start < a.end;
+}
+
+std::vector<SHorizontalInterval> subtractForbiddenIntervals(const SHorizontalInterval& domain, std::vector<SHorizontalInterval> forbidden) {
+    if (domain.end <= domain.start)
+        return {};
+
+    if (forbidden.empty())
+        return {domain};
+
+    std::sort(forbidden.begin(), forbidden.end(), [](const auto& a, const auto& b) { return a.start < b.start; });
+
+    std::vector<SHorizontalInterval> merged;
+    merged.reserve(forbidden.size());
+    for (const auto& interval : forbidden) {
+        SHorizontalInterval clipped = {std::max(domain.start, interval.start), std::min(domain.end, interval.end)};
+        if (clipped.end <= clipped.start)
+            continue;
+
+        if (!merged.empty() && intervalsOverlap(merged.back(), clipped))
+            merged.back().end = std::max(merged.back().end, clipped.end);
+        else
+            merged.push_back(clipped);
+    }
+
+    std::vector<SHorizontalInterval> allowed;
+    float                           cursor = domain.start;
+    for (const auto& blocked : merged) {
+        if (blocked.start > cursor)
+            allowed.push_back({cursor, blocked.start});
+        cursor = std::max(cursor, blocked.end);
+    }
+
+    if (cursor < domain.end)
+        allowed.push_back({cursor, domain.end});
+
+    return allowed;
 }
 }
 
@@ -179,24 +226,202 @@ void CHyprPill::updateWindow(PHLWINDOW pWindow) {
 
 void CHyprPill::damageEntire() {
     const auto box = visibleBoxGlobal().expand(8);
+
+    if (m_bLastRelativeBox.w > 0 && m_bLastRelativeBox.h > 0)
+        g_pHyprRenderer->damageBox(m_bLastRelativeBox);
+
     g_pHyprRenderer->damageBox(box);
     m_bLastRelativeBox = box;
 }
 
 CBox CHyprPill::visibleBoxGlobal() const {
     static auto* const PWIDTH  = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:pill_width")->getDataStaticPtr();
+    static auto* const PHITW   = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:hover_hitbox_width")->getDataStaticPtr();
+    static auto* const PHITH   = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:hover_hitbox_height")->getDataStaticPtr();
+    static auto* const POFFY   = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:hover_hitbox_offset_y")->getDataStaticPtr();
+    static auto* const POCCMARGIN = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:dodge_occluder_margin")->getDataStaticPtr();
+
+    const auto owner = m_pWindow.lock();
+    if (!owner)
+        return {};
 
     CBox box = m_bAssignedBox;
-    box.translate(g_pDecorationPositioner->getEdgeDefinedPoint(DECORATION_EDGE_TOP, m_pWindow.lock()));
+    box.translate(g_pDecorationPositioner->getEdgeDefinedPoint(DECORATION_EDGE_TOP, owner));
 
-    const auto PWORKSPACE      = m_pWindow->m_workspace;
-    const auto WORKSPACEOFFSET = PWORKSPACE && !m_pWindow->m_pinned ? PWORKSPACE->m_renderOffset->value() : Vector2D();
+    const auto PWORKSPACE      = owner->m_workspace;
+    const auto WORKSPACEOFFSET = PWORKSPACE && !owner->m_pinned ? PWORKSPACE->m_renderOffset->value() : Vector2D();
     box.translate(WORKSPACEOFFSET);
 
-    const auto centerX = box.x + box.w / 2.F;
-    box.w              = std::max<int>(1, std::lround(m_width > 1.F ? m_width : **PWIDTH));
+    const auto ownerPos      = owner->m_realPosition->value() + owner->m_floatingOffset + WORKSPACEOFFSET;
+    const float windowLeft   = static_cast<float>(ownerPos.x);
+    const float windowWidth  = std::max(1.F, static_cast<float>(owner->m_realSize->value().x));
+    const float windowRight  = windowLeft + windowWidth;
+    const float centerX = windowLeft + (windowRight - windowLeft) * 0.5F;
+    const auto desiredWidth = std::max<int>(1, std::lround(m_width > 1.F ? m_width : **PWIDTH));
+    box.w = std::min<int>(desiredWidth, std::max<int>(1, static_cast<int>(std::lround(windowRight - windowLeft))));
     box.h              = std::max<int>(1, std::lround(m_height));
-    box.x              = std::lround(centerX - box.w / 2.F);
+
+    if (m_dragGeometryLocked && (m_dragPending || m_draggingThis)) {
+        box.w = std::clamp(m_dragLockedResolvedW, 1, std::max<int>(1, std::lround(windowRight - windowLeft)));
+        const int minX = static_cast<int>(std::lround(windowLeft));
+        const int maxX = static_cast<int>(std::lround(windowRight - box.w));
+        box.x = std::clamp(m_dragLockedResolvedX, minX, maxX);
+        box.y = std::lround(box.y - box.h - m_offsetY);
+        return box;
+    }
+
+    std::vector<SHorizontalInterval> occluders;
+    occluders.reserve(g_pCompositor->m_windows.size());
+
+    const bool canDetectOccluders = owner->m_workspace && owner->m_workspace->isVisible();
+    if (canDetectOccluders) {
+        const float hoverWidthPad  = std::max<Hyprlang::INT>(0, **PHITW);
+        const float hoverHeightPad = std::max<Hyprlang::INT>(0, **PHITH);
+        const float hoverOffsetY   = **POFFY;
+        const float occluderMargin = std::max<Hyprlang::INT>(0, **POCCMARGIN);
+
+        const float ownerTop       = static_cast<float>(box.y);
+        const float basePillY      = std::lround(ownerTop - box.h - m_offsetY);
+        const float hoverLeft      = std::lround((centerX - box.w / 2.F) - hoverWidthPad);
+        const float hoverRight     = std::lround((centerX + box.w / 2.F) + hoverWidthPad);
+        const float hoverTop       = std::lround(basePillY - hoverHeightPad + hoverOffsetY);
+        const float hoverBottom    = hoverTop + box.h + hoverHeightPad * 2.F;
+
+        for (const auto& candidate : g_pCompositor->m_windows) {
+            if (!candidate || candidate == owner || candidate->isHidden() || !candidate->m_isMapped)
+                continue;
+
+            if (!candidate->m_workspace || !candidate->m_workspace->isVisible())
+                continue;
+
+            if (candidate->m_monitor != owner->m_monitor)
+                continue;
+
+            const auto candidatePos = candidate->m_realPosition->value() + candidate->m_floatingOffset;
+            const auto candidateSize = candidate->m_realSize->value();
+
+            const float candidateLeft   = candidatePos.x;
+            const float candidateTop    = candidatePos.y;
+            const float candidateRight  = candidateLeft + candidateSize.x;
+            const float candidateBottom = candidateTop + candidateSize.y;
+
+            const bool overlapsHoverY = candidateBottom > hoverTop && candidateTop < hoverBottom;
+            if (!overlapsHoverY)
+                continue;
+
+            // Only dodge when at least one occluder edge touches the hover hitbox.
+            const bool edgeTouchesHover =
+                (candidateBottom >= hoverTop && candidateBottom <= hoverBottom) || (candidateTop >= hoverTop && candidateTop <= hoverBottom) ||
+                (candidateRight >= hoverLeft && candidateRight <= hoverRight) || (candidateLeft >= hoverLeft && candidateLeft <= hoverRight);
+            if (!edgeTouchesHover)
+                continue;
+
+            const float clippedLeft  = std::max(windowLeft, candidateLeft - occluderMargin);
+            const float clippedRight = std::min(windowRight, candidateRight + occluderMargin);
+            if (clippedRight <= clippedLeft)
+                continue;
+
+            occluders.push_back({clippedLeft, clippedRight});
+        }
+    }
+
+    auto solveConstrained = [&](float width, bool& dodging) {
+        const float halfW = std::max(0.5F, width / 2.F);
+        SHorizontalInterval domain{windowLeft + halfW, windowRight - halfW};
+        domain.end = std::max(domain.end, domain.start);
+
+        std::vector<SHorizontalInterval> forbidden;
+        forbidden.reserve(occluders.size());
+        const float hitPad = std::max<Hyprlang::INT>(0, **PHITW);
+        const float avoidDistance = hitPad + halfW;
+        for (const auto& occ : occluders)
+            forbidden.push_back({occ.start - avoidDistance, occ.end + avoidDistance});
+
+        const auto allowed = subtractForbiddenIntervals(domain, forbidden);
+        const bool centerAllowed = std::ranges::any_of(allowed, [&](const auto& interval) { return centerX >= interval.start && centerX <= interval.end; });
+
+        float resolvedCenter = std::clamp(centerX, domain.start, domain.end);
+        if (!allowed.empty()) {
+            if (centerAllowed) {
+                resolvedCenter = std::clamp(centerX, domain.start, domain.end);
+                dodging = false;
+            } else {
+                dodging = true;
+                bool foundLeftOfCenter  = false;
+                bool foundRightOfCenter = false;
+
+                SHorizontalInterval bestLeft;
+                SHorizontalInterval bestRight;
+
+                for (const auto& interval : allowed) {
+                    if (interval.end <= centerX) {
+                        if (!foundLeftOfCenter || interval.end > bestLeft.end) {
+                            bestLeft = interval;
+                            foundLeftOfCenter = true;
+                        }
+                    } else if (interval.start >= centerX) {
+                        if (!foundRightOfCenter || interval.start < bestRight.start) {
+                            bestRight = interval;
+                            foundRightOfCenter = true;
+                        }
+                    }
+                }
+
+                if (foundLeftOfCenter && foundRightOfCenter) {
+                    const float leftGap  = bestLeft.end - bestLeft.start;
+                    const float rightGap = bestRight.end - bestRight.start;
+
+                    if (std::abs(leftGap - rightGap) < 0.001F) {
+                        // Perfectly centered ambiguity prefers left side.
+                        resolvedCenter = bestLeft.end;
+                    } else {
+                        resolvedCenter = leftGap > rightGap ? bestLeft.end : bestRight.start;
+                    }
+                } else if (foundLeftOfCenter) {
+                    resolvedCenter = bestLeft.end;
+                } else if (foundRightOfCenter) {
+                    resolvedCenter = bestRight.start;
+                } else {
+                    const auto& nearest = *std::min_element(allowed.begin(), allowed.end(), [&](const auto& a, const auto& b) {
+                        const float da = std::min(std::abs(centerX - a.start), std::abs(centerX - a.end));
+                        const float db = std::min(std::abs(centerX - b.start), std::abs(centerX - b.end));
+                        return da < db;
+                    });
+                    resolvedCenter = std::clamp(centerX, nearest.start, nearest.end);
+                }
+            }
+        } else {
+            // If no non-occluding placement exists, gracefully return to center.
+            dodging = false;
+            resolvedCenter = std::clamp(centerX, domain.start, domain.end);
+        }
+
+        float leftLimit  = windowLeft;
+        float rightLimit = windowRight;
+        for (const auto& occ : occluders) {
+            if (resolvedCenter <= occ.start)
+                rightLimit = std::min(rightLimit, occ.start - std::max<Hyprlang::INT>(0, **PHITW));
+            else if (resolvedCenter >= occ.end)
+                leftLimit = std::max(leftLimit, occ.end + std::max<Hyprlang::INT>(0, **PHITW));
+        }
+
+        const float maxHalfWidth = std::max(0.5F, std::min(resolvedCenter - leftLimit, rightLimit - resolvedCenter));
+        const float maxWidth = std::max(1.F, maxHalfWidth * 2.F);
+        return std::pair{resolvedCenter, std::min(width, maxWidth)};
+    };
+
+    bool dodging = false;
+    auto [resolvedCenter, resolvedWidth] = solveConstrained(static_cast<float>(box.w), dodging);
+    std::tie(resolvedCenter, resolvedWidth) = solveConstrained(resolvedWidth, dodging);
+
+    box.w = std::max<int>(1, std::lround(resolvedWidth));
+    box.x = std::clamp(static_cast<int>(std::lround(resolvedCenter - box.w / 2.F)), static_cast<int>(std::lround(windowLeft)),
+                       static_cast<int>(std::lround(windowRight - box.w)));
+
+    m_lastFrameDodging   = dodging;
+    m_lastFrameResolvedX = box.x;
+    m_lastFrameResolvedW = box.w;
+
     box.y              = std::lround(box.y - box.h - m_offsetY);
     return box;
 }
@@ -274,6 +499,10 @@ void CHyprPill::beginDrag(SCallbackInfo& info, const Vector2D& coordsGlobal) {
     m_dragCursorOffset = coordsGlobal - (PWINDOW->m_realPosition->value() + PWINDOW->m_floatingOffset);
     m_dragStartCoords  = coordsGlobal;
 
+    m_dragGeometryLocked  = m_lastFrameDodging;
+    m_dragLockedResolvedX = m_lastFrameResolvedX;
+    m_dragLockedResolvedW = m_lastFrameResolvedW;
+
     info.cancelled   = true;
     m_cancelledDown  = true;
     m_dragPending    = true;
@@ -302,6 +531,7 @@ void CHyprPill::endDrag(SCallbackInfo& info) {
     m_dragPending       = false;
     m_draggingThis      = false;
     m_forceFloatForDrag = false;
+    m_dragGeometryLocked = false;
     m_touchEv           = false;
     m_touchId      = 0;
 
