@@ -409,9 +409,8 @@ void CHyprPill::onMouseMove(SCallbackInfo& info, Vector2D coords) {
     if (Desktop::focusState()->window() != m_pWindow.lock())
         Desktop::focusState()->fullWindowFocus(m_pWindow.lock());
 
-    m_dragPending      = false;
-    m_draggingThis     = true;
-    info.cancelled     = true;
+    m_dragPending  = false;
+    info.cancelled = true;
     updateDragPosition(coords);
     updateCursorShape(coords);
 }
