@@ -270,7 +270,6 @@ void CHyprPill::beginDrag(SCallbackInfo& info, const Vector2D& coordsGlobal) {
 
     m_dragCursorOffset = coordsGlobal - (PWINDOW->m_realPosition->value() + PWINDOW->m_floatingOffset);
     m_dragStartCoords  = coordsGlobal;
-    m_startedMouseDrag = false;
 
     info.cancelled   = true;
     m_cancelledDown  = true;
@@ -291,12 +290,8 @@ void CHyprPill::endDrag(SCallbackInfo& info) {
     if (m_draggingThis && m_touchEv)
         g_pKeybindManager->m_dispatchers["settiled"]("activewindow");
 
-    if (m_startedMouseDrag)
-        g_pKeybindManager->m_dispatchers["mouse"]("0movewindow");
-
     m_dragPending     = false;
     m_draggingThis    = false;
-    m_startedMouseDrag = false;
     m_touchEv      = false;
     m_touchId      = 0;
 
@@ -365,14 +360,12 @@ void CHyprPill::onMouseMove(SCallbackInfo& info, Vector2D coords) {
     }
 
     if (m_draggingThis) {
+        info.cancelled = true;
+
         if (Desktop::focusState()->window() != m_pWindow.lock())
             Desktop::focusState()->fullWindowFocus(m_pWindow.lock());
 
-        if (m_touchEv) {
-            info.cancelled = true;
-            updateDragPosition(coords);
-        }
-
+        updateDragPosition(coords);
         updateCursorShape(coords);
         return;
     }
@@ -410,9 +403,8 @@ void CHyprPill::onMouseMove(SCallbackInfo& info, Vector2D coords) {
 
     m_dragPending      = false;
     m_draggingThis     = true;
-    m_startedMouseDrag = true;
     info.cancelled     = true;
-    g_pKeybindManager->m_dispatchers["mouse"]("1movewindow");
+    updateDragPosition(coords);
     updateCursorShape(coords);
 }
 
@@ -440,8 +432,12 @@ void CHyprPill::onTouchMove(SCallbackInfo& info, ITouch::SMotionEvent e) {
 }
 
 void CHyprPill::updateDragPosition(const Vector2D& coordsGlobal) {
+    const auto PWINDOW = m_pWindow.lock();
+    if (!PWINDOW)
+        return;
+
     const auto targetPos = coordsGlobal - m_dragCursorOffset;
-    g_pKeybindManager->m_dispatchers["movewindowpixel"](std::format("exact {} {},activewindow", (int)targetPos.x, (int)targetPos.y));
+    g_pKeybindManager->m_dispatchers["movewindowpixel"](std::format("exact {} {},address:0x{:x}", (int)targetPos.x, (int)targetPos.y, (uintptr_t)PWINDOW.get()));
     m_draggingThis = true;
 }
 
