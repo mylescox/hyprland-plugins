@@ -47,7 +47,7 @@ class CHyprPill : public IHyprWindowDecoration {
     void                      onMouseButton(SCallbackInfo& info, IPointer::SButtonEvent e);
     void                      onTouchDown(SCallbackInfo& info, ITouch::SDownEvent e);
     void                      onTouchUp(SCallbackInfo& info, ITouch::SUpEvent e);
-    void                      onMouseMove(Vector2D coords);
+    void                      onMouseMove(SCallbackInfo& info, Vector2D coords);
     void                      onTouchMove(SCallbackInfo& info, ITouch::SMotionEvent e);
 
     void                      beginDrag(SCallbackInfo& info, const Vector2D& coords);

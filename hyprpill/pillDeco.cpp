@@ -42,7 +42,7 @@ CHyprPill::CHyprPill(PHLWINDOW pWindow) : IHyprWindowDecoration(pWindow), m_pWin
     m_pTouchMoveCallback = HyprlandAPI::registerCallbackDynamic(
         PHANDLE, "touchMove", [&](void* self, SCallbackInfo& info, std::any param) { onTouchMove(info, std::any_cast<ITouch::SMotionEvent>(param)); });
     m_pMouseMoveCallback = HyprlandAPI::registerCallbackDynamic(
-        PHANDLE, "mouseMove", [&](void* self, SCallbackInfo& info, std::any param) { onMouseMove(std::any_cast<Vector2D>(param)); });
+        PHANDLE, "mouseMove", [&](void* self, SCallbackInfo& info, std::any param) { onMouseMove(info, std::any_cast<Vector2D>(param)); });
 
     updateStateAndAnimate();
 }
@@ -292,9 +292,21 @@ void CHyprPill::onTouchUp(SCallbackInfo& info, ITouch::SUpEvent e) {
     endDrag(info);
 }
 
-void CHyprPill::onMouseMove(Vector2D coords) {
+void CHyprPill::onMouseMove(SCallbackInfo& info, Vector2D coords) {
+    if (!inputIsValid()) {
+        m_hovered = false;
+        return;
+    }
+
     const auto hb = hoverHitboxGlobal();
     m_hovered     = VECINRECT(coords, hb.x, hb.y, hb.x + hb.w, hb.y + hb.h);
+
+    if (m_hovered) {
+        if (Desktop::focusState()->window() != m_pWindow.lock())
+            Desktop::focusState()->fullWindowFocus(m_pWindow.lock());
+
+        info.cancelled = true;
+    }
 
     if (!m_dragPending || m_touchEv || !validMapped(m_pWindow))
         return;
