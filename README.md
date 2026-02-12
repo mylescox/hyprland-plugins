@@ -3,16 +3,8 @@
 This repo houses official plugins for Hyprland.
 
 # Plugin list
- - borders-plus-plus -> adds one or two additional borders to windows
- - csgo-vulkan-fix -> fixes custom resolutions on CS:GO with `-vulkan`
  - hyprbars -> adds title bars to windows
  - hyprpill -> adds animated pill grabbers to windows
- - hyprexpo -> adds an expo-like workspace overview
- - hyprfocus -> flashfocus for hyprland
- - hyprscrolling -> adds a scrolling layout to hyprland
- - hyprtrails -> adds smooth trails behind moving windows
- - hyprwinwrap -> clone of xwinwrap, allows you to put any app as a wallpaper
- - xtra-dispatchers -> adds some new dispatchers
 
 # Install
 > [!IMPORTANT]
@@ -89,8 +81,8 @@ with lib; let
   hypr-plugin-dir = pkgs.symlinkJoin {
     name = "hyrpland-plugins";
     paths = with hyprPluginPkgs; [
-      hyprexpo
-      #...plugins
+      hyprbars
+      hyprpill
     ];
   };
 in
@@ -103,7 +95,7 @@ And in `hyprland.conf`
 
 ```hyprlang
 # load all the plugins you installed
-exec-once = hyprctl plugin load "$HYPR_PLUGIN_DIR/lib/libhyprexpo.so"
+exec-once = hyprctl plugin load "$HYPR_PLUGIN_DIR/lib/libhyprbars.so"
 ```
 
 # Contributing
