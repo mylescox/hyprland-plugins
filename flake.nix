@@ -29,16 +29,8 @@
     packages = eachSystem (system: {
       inherit
         (pkgsFor.${system}.hyprlandPlugins)
-        borders-plus-plus
-        csgo-vulkan-fix
         hyprbars
         hyprpill
-        hyprexpo
-        hyprfocus
-        hyprscrolling
-        hyprtrails
-        hyprwinwrap
-        xtra-dispatchers
         ;
     });
 
@@ -52,16 +44,8 @@
           (prev.hyprlandPlugins
             or {})
           // {
-            borders-plus-plus = callPackage ./borders-plus-plus {};
-            csgo-vulkan-fix = callPackage ./csgo-vulkan-fix {};
             hyprbars = callPackage ./hyprbars {};
             hyprpill = callPackage ./hyprpill {};
-            hyprexpo = callPackage ./hyprexpo {};
-            hyprfocus = callPackage ./hyprfocus {};
-            hyprscrolling = callPackage ./hyprscrolling {};
-            hyprtrails = callPackage ./hyprtrails {};
-            hyprwinwrap = callPackage ./hyprwinwrap {};
-            xtra-dispatchers = callPackage ./xtra-dispatchers {};
           };
       };
     };

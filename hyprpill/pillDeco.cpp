@@ -330,6 +330,12 @@ void CHyprPill::onMouseMove(SCallbackInfo& info, Vector2D coords) {
         return;
     }
 
+    if (m_draggingThis) {
+        info.cancelled = true;
+        updateDragPosition(coords);
+        return;
+    }
+
     const auto hb = hoverHitboxGlobal();
     m_hovered     = VECINRECT(coords, hb.x, hb.y, hb.x + hb.w, hb.y + hb.h);
 
@@ -345,6 +351,9 @@ void CHyprPill::onMouseMove(SCallbackInfo& info, Vector2D coords) {
         updateCursorShape();
         return;
     }
+
+    if (Desktop::focusState()->window() != m_pWindow.lock())
+        Desktop::focusState()->fullWindowFocus(m_pWindow.lock());
 
     if (Desktop::focusState()->window() != m_pWindow.lock())
         Desktop::focusState()->fullWindowFocus(m_pWindow.lock());
