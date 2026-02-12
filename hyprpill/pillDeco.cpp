@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <format>
+#include <string>
 #include <hyprland/src/Compositor.hpp>
 #include <hyprland/src/config/ConfigManager.hpp>
 #include <hyprland/src/desktop/rule/windowRule/WindowRule.hpp>
@@ -385,14 +386,17 @@ void CHyprPill::updateCursorShape(const std::optional<Vector2D>& coords) {
     static auto* const PHOVERCURSOR = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:hover_cursor")->getDataStaticPtr();
     static auto* const PGRABCURSOR  = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:grab_cursor")->getDataStaticPtr();
 
+    const auto         HOVERCURSOR = std::string{*PHOVERCURSOR};
+    const auto         GRABCURSOR  = std::string{*PGRABCURSOR};
+
     for (auto& p : g_pGlobalState->pills) {
         const auto PPILL = p.lock();
         if (!PPILL)
             continue;
 
         if (PPILL->m_dragPending || PPILL->m_draggingThis) {
-            if (!PGRABCURSOR->empty())
-                Cursor::overrideController->setOverride(*PGRABCURSOR, Cursor::CURSOR_OVERRIDE_UNKNOWN);
+            if (!GRABCURSOR.empty())
+                Cursor::overrideController->setOverride(GRABCURSOR, Cursor::CURSOR_OVERRIDE_UNKNOWN);
             else
                 Cursor::overrideController->unsetOverride(Cursor::CURSOR_OVERRIDE_UNKNOWN);
             return;
@@ -407,8 +411,8 @@ void CHyprPill::updateCursorShape(const std::optional<Vector2D>& coords) {
 
         const auto HB = PPILL->clickHitboxGlobal();
         if (VECINRECT(COORDS, HB.x, HB.y, HB.x + HB.w, HB.y + HB.h)) {
-            if (!PHOVERCURSOR->empty())
-                Cursor::overrideController->setOverride(*PHOVERCURSOR, Cursor::CURSOR_OVERRIDE_UNKNOWN);
+            if (!HOVERCURSOR.empty())
+                Cursor::overrideController->setOverride(HOVERCURSOR, Cursor::CURSOR_OVERRIDE_UNKNOWN);
             else
                 Cursor::overrideController->unsetOverride(Cursor::CURSOR_OVERRIDE_UNKNOWN);
             return;
