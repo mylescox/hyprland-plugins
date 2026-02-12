@@ -7,6 +7,8 @@
 #include <hyprland/src/devices/ITouch.hpp>
 #include <hyprland/src/helpers/time/Time.hpp>
 #include <optional>
+#include <chrono>
+#include <string>
 
 #define private public
 #include <hyprland/src/managers/input/InputManager.hpp>
@@ -53,6 +55,8 @@ class CHyprPill : public IHyprWindowDecoration {
 
     void                      beginDrag(SCallbackInfo& info, const Vector2D& coordsGlobal);
     void                      endDrag(SCallbackInfo& info);
+    bool                      handlePillClickAction(SCallbackInfo& info, uint32_t button);
+    bool                      focusAndDispatchToWindow(const std::string& dispatcher, const std::string& arg = "");
     void                      updateStateAndAnimate();
     void                      updateDragPosition(const Vector2D& coordsGlobal);
     void                      updateCursorShape(const std::optional<Vector2D>& coords = std::nullopt);
@@ -74,6 +78,7 @@ class CHyprPill : public IHyprWindowDecoration {
     int                       m_touchId         = 0;
     Vector2D                  m_dragCursorOffset;
     Vector2D                  m_dragStartCoords;
+    Time::steady_tp           m_lastLeftDown      = Time::steadyNow() - std::chrono::seconds(5);
 
     ePillVisualState          m_currentState    = ePillVisualState::INACTIVE;
     ePillVisualState          m_targetState     = ePillVisualState::INACTIVE;

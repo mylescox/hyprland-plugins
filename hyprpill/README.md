@@ -4,6 +4,14 @@ Adds an animated pill-shaped window grabber above each window for quick focusing
 
 The visible pill is intentionally smaller than its interaction zone, so grabbing is easier.
 
+## Pill mouse actions
+
+- Left-drag moves the window (existing behavior).
+- Left double-click toggles floating for the pill's window (uses `double_click_timeout`).
+- Middle-click closes the pill's window (`killactive`).
+- Right-click toggles pseudo mode only when the window is currently tiled.
+
+
 ## Example config
 
 ```ini
@@ -35,6 +43,7 @@ plugin {
     hover_cursor = grab
     grab_cursor = grabbing
     drag_pixel_threshold = 8
+    double_click_timeout = 400
 
     pill_color_active = rgba(99ccffff)
     pill_color_inactive = rgba(777777cc)
@@ -85,6 +94,7 @@ All config options are in `plugin:hyprpill`.
 | `hover_cursor` | str | cursor shape name while hovering the hover hitbox (`""` to disable override) | `grab` |
 | `grab_cursor` | str | cursor shape name while click/drag is active (`""` to disable override) | `grabbing` |
 | `drag_pixel_threshold` | int | movement threshold in px before a press turns into a window drag | `8` |
+| `double_click_timeout` | int | max time in ms between left clicks to trigger pill double-click actions | `400` |
 | `pill_color_active` | color | active/focused color | `rgba(99ccffff)` |
 | `pill_color_inactive` | color | inactive color | `rgba(777777cc)` |
 | `pill_color_hover` | color | hover color | `rgba(bbe6ffff)` |

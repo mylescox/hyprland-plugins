@@ -82,6 +82,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:hover_cursor", Hyprlang::STRING{"grab"});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:grab_cursor", Hyprlang::STRING{"grabbing"});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:drag_pixel_threshold", Hyprlang::INT{8});
+    HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:double_click_timeout", Hyprlang::INT{400});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:pill_color_active", Hyprlang::INT{*configStringToInt("rgba(99ccffff)")});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:pill_color_inactive", Hyprlang::INT{*configStringToInt("rgba(777777cc)")});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:pill_color_hover", Hyprlang::INT{*configStringToInt("rgba(bbe6ffff)")});
