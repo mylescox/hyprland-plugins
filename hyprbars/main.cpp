@@ -142,6 +142,9 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprbars:bar_text_align", Hyprlang::STRING{"center"});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprbars:bar_part_of_window", Hyprlang::INT{1});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprbars:bar_precedence_over_border", Hyprlang::INT{0});
+    HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprbars:bar_width", Hyprlang::INT{-1});
+    HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprbars:bar_edge", Hyprlang::STRING{"top"});
+    HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprbars:bar_vertical_offset", Hyprlang::INT{0});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprbars:bar_buttons_alignment", Hyprlang::STRING{"right"});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprbars:bar_padding", Hyprlang::INT{7});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprbars:bar_button_padding", Hyprlang::INT{5});

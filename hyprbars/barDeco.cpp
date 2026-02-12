@@ -12,9 +12,16 @@
 #include <hyprland/src/managers/animation/AnimationManager.hpp>
 #include <hyprland/src/protocols/LayerShell.hpp>
 #include <pango/pangocairo.h>
+#include <algorithm>
 
 #include "globals.hpp"
 #include "BarPassElement.hpp"
+
+namespace {
+uint32_t barEdgeFromConfig(const std::string& edge) {
+    return edge == "bottom" ? DECORATION_EDGE_BOTTOM : DECORATION_EDGE_TOP;
+}
+}
 
 CHyprBar::CHyprBar(PHLWINDOW pWindow) : IHyprWindowDecoration(pWindow) {
     m_pWindow = pWindow;
@@ -58,21 +65,35 @@ SDecorationPositioningInfo CHyprBar::getPositioningInfo() {
     static auto* const         PHEIGHT     = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprbars:bar_height")->getDataStaticPtr();
     static auto* const         PENABLED    = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprbars:enabled")->getDataStaticPtr();
     static auto* const         PPRECEDENCE = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprbars:bar_precedence_over_border")->getDataStaticPtr();
+    static auto* const         PBARWIDTH   = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprbars:bar_width")->getDataStaticPtr();
+    static auto* const         PBAREDGE    = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprbars:bar_edge")->getDataStaticPtr();
+    static auto* const         PVOFFSET    = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprbars:bar_vertical_offset")->getDataStaticPtr();
+
+    const auto                 EDGE        = barEdgeFromConfig(*PBAREDGE);
+    const auto                 HEIGHT      = m_hidden || !**PENABLED ? 0 : **PHEIGHT;
+    const auto                 WIDTH       = **PBARWIDTH == -1 ? -1 : std::max(1, **PBARWIDTH);
+    (void)PVOFFSET;
 
     SDecorationPositioningInfo info;
     info.policy         = m_hidden ? DECORATION_POSITION_ABSOLUTE : DECORATION_POSITION_STICKY;
-    info.edges          = DECORATION_EDGE_TOP;
+    info.edges          = EDGE;
     info.priority       = **PPRECEDENCE ? 10005 : 5000;
     info.reserved       = true;
-    info.desiredExtents = {{0, m_hidden || !**PENABLED ? 0 : **PHEIGHT}, {0, 0}};
+    info.desiredExtents = EDGE == DECORATION_EDGE_BOTTOM ? SBoxExtents{{0, 0}, {0, HEIGHT}} : SBoxExtents{{0, HEIGHT}, {0, 0}};
+    (void)WIDTH;
     return info;
 }
 
 void CHyprBar::onPositioningReply(const SDecorationPositioningReply& reply) {
+    static auto* const PBARWIDTH = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprbars:bar_width")->getDataStaticPtr();
+
     if (reply.assignedGeometry.size() != m_bAssignedBox.size())
         m_bWindowSizeChanged = true;
 
     m_bAssignedBox = reply.assignedGeometry;
+
+    if (**PBARWIDTH != -1 && **PBARWIDTH > 0)
+        m_bAssignedBox.w = std::max(1, **PBARWIDTH);
 }
 
 std::string CHyprBar::getDisplayName() {
@@ -741,11 +762,19 @@ uint64_t CHyprBar::getDecorationFlags() {
 }
 
 CBox CHyprBar::assignedBoxGlobal() {
+    static auto* const PBAREDGE = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprbars:bar_edge")->getDataStaticPtr();
+    static auto* const PVOFFSET = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprbars:bar_vertical_offset")->getDataStaticPtr();
+
     if (!validMapped(m_pWindow))
         return {};
 
+    const auto EDGE = barEdgeFromConfig(*PBAREDGE);
+
     CBox box = m_bAssignedBox;
-    box.translate(g_pDecorationPositioner->getEdgeDefinedPoint(DECORATION_EDGE_TOP, m_pWindow.lock()));
+    box.translate(g_pDecorationPositioner->getEdgeDefinedPoint(EDGE, m_pWindow.lock()));
+
+    if (**PVOFFSET != 0)
+        box.y += EDGE == DECORATION_EDGE_BOTTOM ? **PVOFFSET : -**PVOFFSET;
 
     const auto PWORKSPACE      = m_pWindow->m_workspace;
     const auto WORKSPACEOFFSET = PWORKSPACE && !m_pWindow->m_pinned ? PWORKSPACE->m_renderOffset->value() : Vector2D();
