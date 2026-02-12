@@ -170,9 +170,16 @@ void CHyprPill::renderPass(PHLMONITOR pMonitor, const float& a) {
     if (!validMapped(m_pWindow))
         return;
 
-    auto box = visibleBoxGlobal().translate(-pMonitor->m_position);
+    const auto globalBox = visibleBoxGlobal();
+    auto       box       = globalBox.translate(-pMonitor->m_position);
     if (box.w < 1 || box.h < 1)
         return;
+
+    if (m_hasLastRenderBox && (m_lastRenderBox.x != globalBox.x || m_lastRenderBox.y != globalBox.y || m_lastRenderBox.w != globalBox.w || m_lastRenderBox.h != globalBox.h))
+        damageEntire();
+
+    m_lastRenderBox    = globalBox;
+    m_hasLastRenderBox = true;
 
     CHyprColor color = m_forcedColor.value_or(m_color);
     color.a *= std::clamp(m_opacity * a, 0.F, 1.F);
@@ -236,6 +243,8 @@ void CHyprPill::damageEntire() {
 
 CBox CHyprPill::visibleBoxGlobal() const {
     static auto* const PWIDTH  = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:pill_width")->getDataStaticPtr();
+    static auto* const PWIDTHINACTIVE = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:pill_width_inactive")->getDataStaticPtr();
+    static auto* const PWIDTHHOVER = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:pill_width_hover")->getDataStaticPtr();
     static auto* const PHITW   = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:hover_hitbox_width")->getDataStaticPtr();
     static auto* const PHITH   = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:hover_hitbox_height")->getDataStaticPtr();
     static auto* const POFFY   = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:hover_hitbox_offset_y")->getDataStaticPtr();
@@ -265,7 +274,7 @@ CBox CHyprPill::visibleBoxGlobal() const {
         box.w = std::clamp(m_dragLockedResolvedW, 1, std::max<int>(1, std::lround(windowRight - windowLeft)));
         const int minX = static_cast<int>(std::lround(windowLeft));
         const int maxX = static_cast<int>(std::lround(windowRight - box.w));
-        box.x = std::clamp(m_dragLockedResolvedX, minX, maxX);
+        box.x = std::clamp(minX + m_dragLockedOffsetX, minX, maxX);
         box.y = std::lround(box.y - box.h - m_offsetY);
         return box;
     }
@@ -325,6 +334,20 @@ CBox CHyprPill::visibleBoxGlobal() const {
             const float clippedLeft  = std::max(windowLeft, candidateLeft - occluderMargin);
             const float clippedRight = std::min(windowRight, candidateRight + occluderMargin);
             if (clippedRight <= clippedLeft)
+                continue;
+
+            const float overlapLeft  = std::max(hoverLeft, candidateLeft);
+            const float overlapRight = std::min(hoverRight, candidateRight);
+            const float overlapTop   = std::max(hoverTop, candidateTop);
+            const float overlapBottom = std::min(hoverBottom, candidateBottom);
+
+            if (overlapRight <= overlapLeft || overlapBottom <= overlapTop)
+                continue;
+
+            const Vector2D overlapSample{(overlapLeft + overlapRight) * 0.5F, (overlapTop + overlapBottom) * 0.5F};
+            const auto topWindowAtOverlap = g_pCompositor->vectorToWindowUnified(
+                overlapSample, Desktop::View::RESERVED_EXTENTS | Desktop::View::INPUT_EXTENTS | Desktop::View::ALLOW_FLOATING);
+            if (topWindowAtOverlap != candidate)
                 continue;
 
             occluders.push_back({clippedLeft, clippedRight});
@@ -416,9 +439,21 @@ CBox CHyprPill::visibleBoxGlobal() const {
         return std::pair{resolvedCenter, std::min(width, maxWidth)};
     };
 
+    float configuredStateWidth = static_cast<float>(**PWIDTH);
+    if (m_targetState == ePillVisualState::INACTIVE)
+        configuredStateWidth = static_cast<float>(**PWIDTHINACTIVE);
+    else if (m_targetState == ePillVisualState::HOVERED || m_targetState == ePillVisualState::PRESSED)
+        configuredStateWidth = static_cast<float>(**PWIDTHHOVER);
+
     bool dodging = false;
-    auto [resolvedCenter, resolvedWidth] = solveConstrained(static_cast<float>(box.w), dodging);
-    std::tie(resolvedCenter, resolvedWidth) = solveConstrained(resolvedWidth, dodging);
+    auto [resolvedCenter, resolvedWidth] = solveConstrained(std::max(1.F, configuredStateWidth), dodging);
+
+    const float freeWidthAtCenter = resolvedWidth;
+    const float animatedWidth = std::max(1.F, static_cast<float>(box.w));
+    resolvedWidth = std::min({animatedWidth, std::max(1.F, configuredStateWidth), freeWidthAtCenter});
+
+    if (dodging)
+        std::tie(resolvedCenter, resolvedWidth) = solveConstrained(resolvedWidth, dodging);
 
     box.w = std::max<int>(1, std::lround(resolvedWidth));
     box.x = std::clamp(static_cast<int>(std::lround(resolvedCenter - box.w / 2.F)), static_cast<int>(std::lround(windowLeft)),
@@ -508,6 +543,7 @@ void CHyprPill::beginDrag(SCallbackInfo& info, const Vector2D& coordsGlobal) {
     m_dragGeometryLocked  = m_lastFrameDodging;
     m_dragLockedResolvedX = m_lastFrameResolvedX;
     m_dragLockedResolvedW = m_lastFrameResolvedW;
+    m_dragLockedOffsetX   = m_lastFrameResolvedX - static_cast<int>(std::lround(PWINDOW->m_realPosition->value().x + PWINDOW->m_floatingOffset.x));
 
     info.cancelled   = true;
     m_cancelledDown  = true;
@@ -534,11 +570,12 @@ void CHyprPill::endDrag(SCallbackInfo& info) {
         }
     }
 
-    m_dragPending       = false;
-    m_draggingThis      = false;
-    m_forceFloatForDrag = false;
+    m_dragPending        = false;
+    m_draggingThis       = false;
+    m_forceFloatForDrag  = false;
     m_dragGeometryLocked = false;
-    m_touchEv           = false;
+    m_dragLockedOffsetX  = 0;
+    m_touchEv            = false;
     m_touchId      = 0;
 
     if (g_pGlobalState->dragPill.get() == this)
