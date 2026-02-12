@@ -30,7 +30,7 @@ uint32_t CHyprBar::getBarEdge() const {
 
 int CHyprBar::getConfiguredBarWidth() const {
     static auto* const PBARWIDTH = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprbars:bar_width")->getDataStaticPtr();
-    return **PBARWIDTH == -1 ? -1 : std::max(1, **PBARWIDTH);
+    return **PBARWIDTH == -1 ? -1 : static_cast<int>(std::max<Hyprlang::INT>(1, **PBARWIDTH));
 }
 
 CBox CHyprBar::getResolvedBarBox(const bool includeWorkspaceOffset) const {
