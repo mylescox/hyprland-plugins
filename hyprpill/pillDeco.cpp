@@ -289,9 +289,12 @@ void CHyprPill::endDrag(SCallbackInfo& info) {
     m_cancelledDown = false;
 
     if (m_draggingThis && m_forceFloatForDrag) {
-        if (Desktop::focusState()->window() != m_pWindow.lock())
-            Desktop::focusState()->fullWindowFocus(m_pWindow.lock());
-        g_pKeybindManager->m_dispatchers["settiled"]("activewindow");
+        const auto PWINDOW = m_pWindow.lock();
+        if (PWINDOW) {
+            if (Desktop::focusState()->window() != PWINDOW)
+                Desktop::focusState()->fullWindowFocus(PWINDOW);
+            g_pKeybindManager->m_dispatchers["settiled"](std::format("address:0x{:x}", (uintptr_t)PWINDOW.get()));
+        }
     }
 
     m_dragPending       = false;
@@ -444,7 +447,7 @@ void CHyprPill::updateDragPosition(const Vector2D& coordsGlobal) {
     if (!m_draggingThis && m_forceFloatForDrag) {
         if (Desktop::focusState()->window() != PWINDOW)
             Desktop::focusState()->fullWindowFocus(PWINDOW);
-        g_pKeybindManager->m_dispatchers["setfloating"]("activewindow");
+        g_pKeybindManager->m_dispatchers["setfloating"](std::format("address:0x{:x}", (uintptr_t)PWINDOW.get()));
     }
 
     const auto targetPos = coordsGlobal - m_dragCursorOffset;
