@@ -14,11 +14,22 @@ plugin {
     pill_width = 96
     pill_height = 12
     pill_radius = 12
+    pill_width_inactive = 84
+    pill_height_inactive = 10
+    pill_radius_inactive = 10
     pill_width_hover = 120
     pill_height_hover = 14
 
-    pill_hitbox_width = 10
-    pill_hitbox_height = 8
+    hover_hitbox_width = 10
+    hover_hitbox_height = 8
+    hover_hitbox_offset_y = 0
+
+    click_hitbox_width = 10
+    click_hitbox_height = 8
+    click_hitbox_offset_y = 0
+
+    debug_hitbox_hover = false
+    debug_hitbox_click = false
 
     pill_color_active = rgba(99ccffff)
     pill_color_inactive = rgba(777777cc)
@@ -52,10 +63,19 @@ All config options are in `plugin:hyprpill`.
 | `pill_width` | int | pill width in px | `96` |
 | `pill_height` | int | pill thickness/height in px | `12` |
 | `pill_radius` | int | corner radius | `12` |
+| `pill_width_inactive` | int | width when inactive/unfocused | `84` |
+| `pill_height_inactive` | int | height when inactive/unfocused | `10` |
+| `pill_radius_inactive` | int | corner radius when inactive/unfocused | `10` |
 | `pill_width_hover` | int | width when hovered/pressed | `120` |
 | `pill_height_hover` | int | height when hovered/pressed | `14` |
-| `pill_hitbox_width` | int | extra horizontal hitbox padding | `10` |
-| `pill_hitbox_height` | int | extra vertical hitbox padding | `8` |
+| `hover_hitbox_width` | int | extra horizontal hover hitbox padding | `10` |
+| `hover_hitbox_height` | int | extra vertical hover hitbox padding | `8` |
+| `hover_hitbox_offset_y` | int | hover hitbox y offset from visible pill | `0` |
+| `click_hitbox_width` | int | extra horizontal click/drag hitbox padding | `10` |
+| `click_hitbox_height` | int | extra vertical click/drag hitbox padding | `8` |
+| `click_hitbox_offset_y` | int | click hitbox y offset from visible pill | `0` |
+| `debug_hitbox_hover` | bool | draw hover hitbox overlay for tuning | `false` |
+| `debug_hitbox_click` | bool | draw click hitbox overlay for tuning | `false` |
 | `pill_color_active` | color | active/focused color | `rgba(99ccffff)` |
 | `pill_color_inactive` | color | inactive color | `rgba(777777cc)` |
 | `pill_color_hover` | color | hover color | `rgba(bbe6ffff)` |
