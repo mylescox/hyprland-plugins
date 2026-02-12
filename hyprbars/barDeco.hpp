@@ -77,6 +77,7 @@ class CHyprBar : public IHyprWindowDecoration {
     void                      renderBarButtons(const Vector2D& bufferSize, const float scale);
     void                      renderBarButtonsText(CBox* barBox, const float scale, const float a);
     void                      damageOnButtonHover();
+    float                     getBarContentY(float barHeight, float contentHeight) const;
 
     bool                      inputIsValid();
     void                      onMouseButton(SCallbackInfo& info, IPointer::SButtonEvent e);
