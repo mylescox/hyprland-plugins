@@ -151,10 +151,12 @@ void CHyprPill::renderPass(PHLMONITOR pMonitor, const float& a) {
         const bool overPill  = inputIsValid(true) && VECINRECT(cursorPos, hoverHitboxGlobal().x, hoverHitboxGlobal().y, hoverHitboxGlobal().x + hoverHitboxGlobal().w, hoverHitboxGlobal().y + hoverHitboxGlobal().h);
 
         CBox indicator = box;
-        indicator.w    = std::max(6, std::lround(10.F * pMonitor->m_scale));
-        indicator.h    = indicator.w;
-        indicator.x    = box.x + box.w - indicator.w;
-        indicator.y    = box.y - indicator.h - std::max(1, std::lround(2.F * pMonitor->m_scale));
+        const int indicatorSize    = std::max(6, static_cast<int>(std::lround(10.F * pMonitor->m_scale)));
+        const int indicatorPadding = std::max(1, static_cast<int>(std::lround(2.F * pMonitor->m_scale)));
+        indicator.w                = indicatorSize;
+        indicator.h                = indicatorSize;
+        indicator.x                = box.x + box.w - indicator.w;
+        indicator.y                = box.y - indicator.h - indicatorPadding;
 
         CHyprColor indicatorColor = CHyprColor{0.6F, 0.6F, 0.6F, 0.8F};
         if (m_dragPending || m_draggingThis)
