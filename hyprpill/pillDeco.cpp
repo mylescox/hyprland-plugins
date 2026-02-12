@@ -268,6 +268,7 @@ void CHyprPill::beginDrag(SCallbackInfo& info, const Vector2D& coordsGlobal) {
     if (PWINDOW->m_isFloating)
         g_pCompositor->changeWindowZOrder(PWINDOW, true);
 
+    m_forceFloatForDrag = !PWINDOW->m_isFloating;
     m_dragCursorOffset = coordsGlobal - (PWINDOW->m_realPosition->value() + PWINDOW->m_floatingOffset);
     m_dragStartCoords  = coordsGlobal;
 
@@ -287,12 +288,16 @@ void CHyprPill::endDrag(SCallbackInfo& info) {
 
     m_cancelledDown = false;
 
-    if (m_draggingThis && m_touchEv)
+    if (m_draggingThis && m_forceFloatForDrag) {
+        if (Desktop::focusState()->window() != m_pWindow.lock())
+            Desktop::focusState()->fullWindowFocus(m_pWindow.lock());
         g_pKeybindManager->m_dispatchers["settiled"]("activewindow");
+    }
 
-    m_dragPending     = false;
-    m_draggingThis    = false;
-    m_touchEv      = false;
+    m_dragPending       = false;
+    m_draggingThis      = false;
+    m_forceFloatForDrag = false;
+    m_touchEv           = false;
     m_touchId      = 0;
 
     if (g_pGlobalState->dragPill.get() == this)
@@ -435,6 +440,12 @@ void CHyprPill::updateDragPosition(const Vector2D& coordsGlobal) {
     const auto PWINDOW = m_pWindow.lock();
     if (!PWINDOW)
         return;
+
+    if (!m_draggingThis && m_forceFloatForDrag) {
+        if (Desktop::focusState()->window() != PWINDOW)
+            Desktop::focusState()->fullWindowFocus(PWINDOW);
+        g_pKeybindManager->m_dispatchers["setfloating"]("activewindow");
+    }
 
     const auto targetPos = coordsGlobal - m_dragCursorOffset;
     g_pKeybindManager->m_dispatchers["movewindowpixel"](std::format("exact {} {},address:0x{:x}", (int)targetPos.x, (int)targetPos.y, (uintptr_t)PWINDOW.get()));
