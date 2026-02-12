@@ -78,8 +78,10 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:click_hitbox_offset_y", Hyprlang::INT{0});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:debug_hitbox_hover", Hyprlang::INT{0});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:debug_hitbox_click", Hyprlang::INT{0});
+    HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:debug_cursor_state", Hyprlang::INT{0});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:hover_cursor", Hyprlang::STRING{"grab"});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:grab_cursor", Hyprlang::STRING{"grabbing"});
+    HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:drag_pixel_threshold", Hyprlang::INT{8});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:pill_color_active", Hyprlang::INT{*configStringToInt("rgba(99ccffff)")});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:pill_color_inactive", Hyprlang::INT{*configStringToInt("rgba(777777cc)")});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:pill_color_hover", Hyprlang::INT{*configStringToInt("rgba(bbe6ffff)")});
@@ -104,7 +106,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
 
     HyprlandAPI::reloadConfig();
 
-    return {"hyprpill", "A plugin to add animated pill grabbers to windows.", "Vaxry", "1.0"};
+    return {"hyprpill", "A plugin to add animated pill grabbers to windows.", "mylescox", "1.0"};
 }
 
 APICALL EXPORT void PLUGIN_EXIT() {
