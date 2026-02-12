@@ -56,7 +56,7 @@ class CHyprPill : public IHyprWindowDecoration {
     void                      updateStateAndAnimate();
     void                      updateDragPosition(const Vector2D& coordsGlobal);
     void                      updateCursorShape(const std::optional<Vector2D>& coords = std::nullopt);
-    bool                      inputIsValid();
+    bool                      inputIsValid(bool ignoreSeatGrab = false);
     Vector2D                  cursorRelativeToPill() const;
     bool                      isHovering() const;
 
@@ -72,6 +72,7 @@ class CHyprPill : public IHyprWindowDecoration {
     bool                      m_hovered         = false;
     int                       m_touchId         = 0;
     Vector2D                  m_dragCursorOffset;
+    Vector2D                  m_dragStartCoords;
 
     ePillVisualState          m_currentState    = ePillVisualState::INACTIVE;
     ePillVisualState          m_targetState     = ePillVisualState::INACTIVE;
