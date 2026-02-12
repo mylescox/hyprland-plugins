@@ -19,12 +19,12 @@
 #include "globals.hpp"
 
 namespace {
-float lerp(float a, float b, float t) {
+float lerpf(float a, float b, float t) {
     return a + (b - a) * t;
 }
 
 CHyprColor lerpColor(const CHyprColor& a, const CHyprColor& b, float t) {
-    return CHyprColor{lerp(a.r, b.r, t), lerp(a.g, b.g, t), lerp(a.b, b.b, t), lerp(a.a, b.a, t)};
+    return CHyprColor{lerpf(a.r, b.r, t), lerpf(a.g, b.g, t), lerpf(a.b, b.b, t), lerpf(a.a, b.a, t)};
 }
 
 float easeInOut(float t) {
@@ -121,7 +121,7 @@ void CHyprPill::renderPass(PHLMONITOR pMonitor, const float& a) {
     CHyprColor color = m_forcedColor.value_or(m_color);
     color.a *= std::clamp(m_opacity * a, 0.F, 1.F);
 
-    g_pHyprOpenGL->renderRect(box, color, m_radius * pMonitor->m_scale);
+    g_pHyprOpenGL->renderRect(box, color, {.round = m_radius * pMonitor->m_scale, .roundingPower = m_pWindow->roundingPower()});
 
     if (m_targetState != m_currentState)
         damageEntire();
@@ -351,11 +351,11 @@ void CHyprPill::updateStateAndAnimate() {
     const float t          = std::clamp(elapsedMs / durationMs, 0.F, 1.F);
     const float easedT     = easeInOut(t);
 
-    m_width   = lerp(m_fromWidth, toWidth, easedT);
-    m_height  = lerp(m_fromHeight, toHeight, easedT);
-    m_radius  = lerp(m_fromRadius, toRadius, easedT);
-    m_opacity = lerp(m_fromOpacity, toOpacity, easedT);
-    m_offsetY = lerp(m_fromOffsetY, toOffsetY, easedT);
+    m_width   = lerpf(m_fromWidth, toWidth, easedT);
+    m_height  = lerpf(m_fromHeight, toHeight, easedT);
+    m_radius  = lerpf(m_fromRadius, toRadius, easedT);
+    m_opacity = lerpf(m_fromOpacity, toOpacity, easedT);
+    m_offsetY = lerpf(m_fromOffsetY, toOffsetY, easedT);
     m_color   = lerpColor(m_fromColor, toColor, easedT);
 
     if (t < 1.F || std::chrono::duration_cast<std::chrono::milliseconds>(now - m_lastFrame).count() > 16)
