@@ -357,7 +357,7 @@ void CHyprPill::onMouseMove(SCallbackInfo& info, Vector2D coords) {
         return;
     }
 
-    if (m_dragPending || m_draggingThis) {
+    if (m_dragPending) {
         info.cancelled = true;
 
         if (Desktop::focusState()->window() != m_pWindow.lock())
@@ -365,8 +365,14 @@ void CHyprPill::onMouseMove(SCallbackInfo& info, Vector2D coords) {
     }
 
     if (m_draggingThis) {
-        if (!m_startedMouseDrag)
+        if (Desktop::focusState()->window() != m_pWindow.lock())
+            Desktop::focusState()->fullWindowFocus(m_pWindow.lock());
+
+        if (m_touchEv) {
+            info.cancelled = true;
             updateDragPosition(coords);
+        }
+
         updateCursorShape(coords);
         return;
     }
