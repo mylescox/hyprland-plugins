@@ -100,6 +100,13 @@ class CHyprPill : public IHyprWindowDecoration {
     float                     m_fromOffsetY     = 0.F;
     CHyprColor                m_fromColor;
 
+    mutable bool              m_lastFrameDodging     = false;
+    mutable int               m_lastFrameResolvedX   = 0;
+    mutable int               m_lastFrameResolvedW   = 0;
+    bool                      m_dragGeometryLocked   = false;
+    int                       m_dragLockedResolvedX  = 0;
+    int                       m_dragLockedResolvedW  = 0;
+
     SP<HOOK_CALLBACK_FN>      m_pMouseButtonCallback;
     SP<HOOK_CALLBACK_FN>      m_pTouchDownCallback;
     SP<HOOK_CALLBACK_FN>      m_pTouchUpCallback;

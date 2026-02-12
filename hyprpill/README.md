@@ -31,6 +31,7 @@ plugin {
     hover_hitbox_width = 10
     hover_hitbox_height = 8
     hover_hitbox_offset_y = 0
+    dodge_occluder_margin = 4
 
     click_hitbox_width = 10
     click_hitbox_height = 8
@@ -85,6 +86,7 @@ All config options are in `plugin:hyprpill`.
 | `hover_hitbox_width` | int | extra horizontal hover hitbox padding | `10` |
 | `hover_hitbox_height` | int | extra vertical hover hitbox padding | `8` |
 | `hover_hitbox_offset_y` | int | hover hitbox y offset from visible pill | `0` |
+| `dodge_occluder_margin` | int | extra horizontal padding used when avoiding top-edge occluding windows | `4` |
 | `click_hitbox_width` | int | extra horizontal click/drag hitbox padding | `10` |
 | `click_hitbox_height` | int | extra vertical click/drag hitbox padding | `8` |
 | `click_hitbox_offset_y` | int | click hitbox y offset from visible pill | `0` |

@@ -73,6 +73,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:hover_hitbox_width", Hyprlang::INT{10});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:hover_hitbox_height", Hyprlang::INT{8});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:hover_hitbox_offset_y", Hyprlang::INT{0});
+    HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:dodge_occluder_margin", Hyprlang::INT{4});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:click_hitbox_width", Hyprlang::INT{10});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:click_hitbox_height", Hyprlang::INT{8});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:click_hitbox_offset_y", Hyprlang::INT{0});
