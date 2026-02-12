@@ -313,26 +313,20 @@ void CHyprPill::onMouseMove(SCallbackInfo& info, Vector2D coords) {
     const bool dragOwnedByOtherPill = !g_pGlobalState->dragPill.expired() && g_pGlobalState->dragPill.get() != this;
     if (dragOwnedByOtherPill) {
         m_hovered = false;
-        updateCursorShape();
+        updateCursorShape(coords);
         return;
     }
 
     if (!inputIsValid()) {
         m_hovered = false;
-        updateCursorShape();
+        updateCursorShape(coords);
         return;
     }
 
     if (m_draggingThis) {
         info.cancelled = true;
         updateDragPosition(coords);
-        updateCursorShape();
-        return;
-    }
-
-    if (m_draggingThis) {
-        info.cancelled = true;
-        updateDragPosition(coords);
+        updateCursorShape(coords);
         return;
     }
 
@@ -348,12 +342,9 @@ void CHyprPill::onMouseMove(SCallbackInfo& info, Vector2D coords) {
     }
 
     if (!m_dragPending || m_touchEv || !validMapped(m_pWindow)) {
-        updateCursorShape();
+        updateCursorShape(coords);
         return;
     }
-
-    if (Desktop::focusState()->window() != m_pWindow.lock())
-        Desktop::focusState()->fullWindowFocus(m_pWindow.lock());
 
     if (Desktop::focusState()->window() != m_pWindow.lock())
         Desktop::focusState()->fullWindowFocus(m_pWindow.lock());
@@ -361,7 +352,7 @@ void CHyprPill::onMouseMove(SCallbackInfo& info, Vector2D coords) {
     m_dragPending  = false;
     info.cancelled = true;
     updateDragPosition(coords);
-    updateCursorShape();
+    updateCursorShape(coords);
 }
 
 void CHyprPill::onTouchMove(SCallbackInfo& info, ITouch::SMotionEvent e) {
@@ -387,7 +378,7 @@ void CHyprPill::updateDragPosition(const Vector2D& coordsGlobal) {
     m_draggingThis = true;
 }
 
-void CHyprPill::updateCursorShape() {
+void CHyprPill::updateCursorShape(const std::optional<Vector2D>& coords) {
     if (!g_pGlobalState || !Cursor::overrideController)
         return;
 
@@ -402,7 +393,7 @@ void CHyprPill::updateCursorShape() {
         }
     }
 
-    const auto COORDS = g_pInputManager->getMouseCoordsInternal();
+    const auto COORDS = coords.value_or(g_pInputManager->getMouseCoordsInternal());
     for (auto& p : g_pGlobalState->pills) {
         const auto PPILL = p.lock();
         if (!PPILL || !PPILL->inputIsValid())

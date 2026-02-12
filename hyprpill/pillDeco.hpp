@@ -6,6 +6,7 @@
 #include <hyprland/src/devices/IPointer.hpp>
 #include <hyprland/src/devices/ITouch.hpp>
 #include <hyprland/src/helpers/time/Time.hpp>
+#include <optional>
 
 #define private public
 #include <hyprland/src/managers/input/InputManager.hpp>
@@ -54,7 +55,7 @@ class CHyprPill : public IHyprWindowDecoration {
     void                      endDrag(SCallbackInfo& info);
     void                      updateStateAndAnimate();
     void                      updateDragPosition(const Vector2D& coordsGlobal);
-    void                      updateCursorShape();
+    void                      updateCursorShape(const std::optional<Vector2D>& coords = std::nullopt);
     bool                      inputIsValid();
     Vector2D                  cursorRelativeToPill() const;
     bool                      isHovering() const;
