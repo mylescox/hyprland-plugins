@@ -70,6 +70,7 @@ class CHyprPill : public IHyprWindowDecoration {
     bool                      m_touchEv         = false;
     bool                      m_cancelledDown   = false;
     bool                      m_hovered         = false;
+    bool                      m_startedMouseDrag = false;
     int                       m_touchId         = 0;
     Vector2D                  m_dragCursorOffset;
     Vector2D                  m_dragStartCoords;
