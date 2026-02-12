@@ -145,7 +145,29 @@ void CHyprPill::renderPass(PHLMONITOR pMonitor, const float& a) {
         g_pHyprOpenGL->renderRect(clickBox, CHyprColor{1.F, 0.5F, 0.3F, 0.22F}, {.round = 0});
     }
 
-    if (m_targetState != m_currentState || **PDEBUGHOVER || **PDEBUGCLICK)
+    static auto* const PDEBUGCURSOR = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:debug_cursor_state")->getDataStaticPtr();
+    if (**PDEBUGCURSOR) {
+        const auto cursorPos = g_pInputManager->getMouseCoordsInternal();
+        const bool overPill  = inputIsValid(true) && VECINRECT(cursorPos, hoverHitboxGlobal().x, hoverHitboxGlobal().y, hoverHitboxGlobal().x + hoverHitboxGlobal().w, hoverHitboxGlobal().y + hoverHitboxGlobal().h);
+
+        CBox indicator = box;
+        const int indicatorSize    = std::max(6, static_cast<int>(std::lround(10.F * pMonitor->m_scale)));
+        const int indicatorPadding = std::max(1, static_cast<int>(std::lround(2.F * pMonitor->m_scale)));
+        indicator.w                = indicatorSize;
+        indicator.h                = indicatorSize;
+        indicator.x                = box.x + box.w - indicator.w;
+        indicator.y                = box.y - indicator.h - indicatorPadding;
+
+        CHyprColor indicatorColor = CHyprColor{0.6F, 0.6F, 0.6F, 0.8F};
+        if (m_dragPending || m_draggingThis)
+            indicatorColor = CHyprColor{1.F, 0.65F, 0.2F, 0.95F};
+        else if (overPill)
+            indicatorColor = CHyprColor{0.2F, 0.9F, 0.35F, 0.95F};
+
+        g_pHyprOpenGL->renderRect(indicator, indicatorColor, {.round = 0});
+    }
+
+    if (m_targetState != m_currentState || **PDEBUGHOVER || **PDEBUGCLICK || **PDEBUGCURSOR)
         damageEntire();
 }
 
@@ -213,14 +235,16 @@ bool CHyprPill::isHovering() const {
     return VECINRECT(coords, hb.x, hb.y, hb.x + hb.w, hb.y + hb.h);
 }
 
-bool CHyprPill::inputIsValid() {
+bool CHyprPill::inputIsValid(bool ignoreSeatGrab) {
     static auto* const PENABLED = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:enabled")->getDataStaticPtr();
 
     if (!**PENABLED || m_hidden)
         return false;
 
-    if (!m_pWindow->m_workspace || !m_pWindow->m_workspace->isVisible() || !g_pInputManager->m_exclusiveLSes.empty() ||
-        (g_pSeatManager->m_seatGrab && !g_pSeatManager->m_seatGrab->accepts(m_pWindow->wlSurface()->resource())))
+    if (!m_pWindow->m_workspace || !m_pWindow->m_workspace->isVisible() || !g_pInputManager->m_exclusiveLSes.empty())
+        return false;
+
+    if (!ignoreSeatGrab && g_pSeatManager->m_seatGrab && !g_pSeatManager->m_seatGrab->accepts(m_pWindow->wlSurface()->resource()))
         return false;
 
     return true;
@@ -244,7 +268,9 @@ void CHyprPill::beginDrag(SCallbackInfo& info, const Vector2D& coordsGlobal) {
     if (PWINDOW->m_isFloating)
         g_pCompositor->changeWindowZOrder(PWINDOW, true);
 
+    m_forceFloatForDrag = !PWINDOW->m_isFloating;
     m_dragCursorOffset = coordsGlobal - (PWINDOW->m_realPosition->value() + PWINDOW->m_floatingOffset);
+    m_dragStartCoords  = coordsGlobal;
 
     info.cancelled   = true;
     m_cancelledDown  = true;
@@ -262,12 +288,16 @@ void CHyprPill::endDrag(SCallbackInfo& info) {
 
     m_cancelledDown = false;
 
-    if (m_draggingThis && m_touchEv)
+    if (m_draggingThis && m_forceFloatForDrag) {
+        if (Desktop::focusState()->window() != m_pWindow.lock())
+            Desktop::focusState()->fullWindowFocus(m_pWindow.lock());
         g_pKeybindManager->m_dispatchers["settiled"]("activewindow");
+    }
 
-    m_dragPending  = false;
-    m_draggingThis = false;
-    m_touchEv      = false;
+    m_dragPending       = false;
+    m_draggingThis      = false;
+    m_forceFloatForDrag = false;
+    m_touchEv           = false;
     m_touchId      = 0;
 
     if (g_pGlobalState->dragPill.get() == this)
@@ -277,13 +307,13 @@ void CHyprPill::endDrag(SCallbackInfo& info) {
 }
 
 void CHyprPill::onMouseButton(SCallbackInfo& info, IPointer::SButtonEvent e) {
-    if (!inputIsValid()) {
-        updateCursorShape();
+    if (e.state != WL_POINTER_BUTTON_STATE_PRESSED) {
+        endDrag(info);
         return;
     }
 
-    if (e.state != WL_POINTER_BUTTON_STATE_PRESSED) {
-        endDrag(info);
+    if (!inputIsValid()) {
+        updateCursorShape();
         return;
     }
 
@@ -318,21 +348,39 @@ void CHyprPill::onMouseMove(SCallbackInfo& info, Vector2D coords) {
         return;
     }
 
-    if (!inputIsValid()) {
+    const bool activeDrag = m_dragPending || m_draggingThis;
+    if (!inputIsValid(activeDrag)) {
         m_hovered = false;
+        if (activeDrag)
+            info.cancelled = true;
         updateCursorShape(coords);
         return;
     }
 
+    if (m_dragPending) {
+        info.cancelled = true;
+
+        if (Desktop::focusState()->window() != m_pWindow.lock())
+            Desktop::focusState()->fullWindowFocus(m_pWindow.lock());
+    }
+
     if (m_draggingThis) {
         info.cancelled = true;
+
+        if (Desktop::focusState()->window() != m_pWindow.lock())
+            Desktop::focusState()->fullWindowFocus(m_pWindow.lock());
+
         updateDragPosition(coords);
         updateCursorShape(coords);
         return;
     }
 
-    const auto hb = hoverHitboxGlobal();
-    m_hovered     = VECINRECT(coords, hb.x, hb.y, hb.x + hb.w, hb.y + hb.h);
+    const auto hb    = hoverHitboxGlobal();
+    const bool wasHovered = m_hovered;
+    m_hovered        = VECINRECT(coords, hb.x, hb.y, hb.x + hb.w, hb.y + hb.h);
+
+    if (m_hovered != wasHovered)
+        damageEntire();
 
     if (m_hovered) {
         if (!m_dragPending && Desktop::focusState()->window() != m_pWindow.lock())
@@ -347,35 +395,60 @@ void CHyprPill::onMouseMove(SCallbackInfo& info, Vector2D coords) {
         return;
     }
 
+    static auto* const PDRAGTHRESH = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:drag_pixel_threshold")->getDataStaticPtr();
+    const auto dragDelta           = coords - m_dragStartCoords;
+    const float dragDistance       = std::sqrt(dragDelta.x * dragDelta.x + dragDelta.y * dragDelta.y);
+    if (dragDistance < std::max<Hyprlang::INT>(0, **PDRAGTHRESH)) {
+        updateCursorShape(coords);
+        return;
+    }
+
     if (Desktop::focusState()->window() != m_pWindow.lock())
         Desktop::focusState()->fullWindowFocus(m_pWindow.lock());
 
-    m_dragPending  = false;
-    info.cancelled = true;
+    m_dragPending      = false;
+    m_draggingThis     = true;
+    info.cancelled     = true;
     updateDragPosition(coords);
     updateCursorShape(coords);
 }
 
 void CHyprPill::onTouchMove(SCallbackInfo& info, ITouch::SMotionEvent e) {
-    if (!m_dragPending || !m_touchEv || e.touchID != m_touchId || !validMapped(m_pWindow))
+    if ((!m_dragPending && !m_draggingThis) || !m_touchEv || e.touchID != m_touchId || !validMapped(m_pWindow))
         return;
 
     auto PMONITOR     = m_pWindow->m_monitor.lock();
     PMONITOR          = PMONITOR ? PMONITOR : Desktop::focusState()->monitor();
     const auto COORDS = Vector2D(PMONITOR->m_position.x + e.pos.x * PMONITOR->m_size.x, PMONITOR->m_position.y + e.pos.y * PMONITOR->m_size.y);
 
+    static auto* const PDRAGTHRESH = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:drag_pixel_threshold")->getDataStaticPtr();
+    if (!m_draggingThis) {
+        const auto dragDelta     = COORDS - m_dragStartCoords;
+        const float dragDistance = std::sqrt(dragDelta.x * dragDelta.x + dragDelta.y * dragDelta.y);
+        if (dragDistance < std::max<Hyprlang::INT>(0, **PDRAGTHRESH))
+            return;
+
+        m_dragPending = false;
+    }
+
+    info.cancelled = true;
     updateDragPosition(COORDS);
+    updateCursorShape(COORDS);
 }
 
 void CHyprPill::updateDragPosition(const Vector2D& coordsGlobal) {
-    if (!m_draggingThis && !m_pWindow->m_isFloating) {
+    const auto PWINDOW = m_pWindow.lock();
+    if (!PWINDOW)
+        return;
+
+    if (!m_draggingThis && m_forceFloatForDrag) {
+        if (Desktop::focusState()->window() != PWINDOW)
+            Desktop::focusState()->fullWindowFocus(PWINDOW);
         g_pKeybindManager->m_dispatchers["setfloating"]("activewindow");
-        g_pKeybindManager->m_dispatchers["resizewindowpixel"]("exact 50% 50%,activewindow");
-        g_pKeybindManager->m_dispatchers["pin"]("activewindow");
     }
 
     const auto targetPos = coordsGlobal - m_dragCursorOffset;
-    g_pKeybindManager->m_dispatchers["movewindowpixel"](std::format("exact {} {},activewindow", (int)targetPos.x, (int)targetPos.y));
+    g_pKeybindManager->m_dispatchers["movewindowpixel"](std::format("exact {} {},address:0x{:x}", (int)targetPos.x, (int)targetPos.y, (uintptr_t)PWINDOW.get()));
     m_draggingThis = true;
 }
 
@@ -406,10 +479,10 @@ void CHyprPill::updateCursorShape(const std::optional<Vector2D>& coords) {
     const auto COORDS = coords.value_or(g_pInputManager->getMouseCoordsInternal());
     for (auto& p : g_pGlobalState->pills) {
         const auto PPILL = p.lock();
-        if (!PPILL || !PPILL->inputIsValid())
+        if (!PPILL || !PPILL->inputIsValid(true))
             continue;
 
-        const auto HB = PPILL->clickHitboxGlobal();
+        const auto HB = PPILL->hoverHitboxGlobal();
         if (VECINRECT(COORDS, HB.x, HB.y, HB.x + HB.w, HB.y + HB.h)) {
             if (!HOVERCURSOR.empty())
                 Cursor::overrideController->setOverride(HOVERCURSOR, Cursor::CURSOR_OVERRIDE_UNKNOWN);
