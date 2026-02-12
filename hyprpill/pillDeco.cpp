@@ -285,6 +285,9 @@ CBox CHyprPill::visibleBoxGlobal() const {
 
     const bool canDetectOccluders = owner->m_workspace && owner->m_workspace->isVisible();
     if (canDetectOccluders) {
+        const auto ownerIt = std::find(g_pCompositor->m_windows.begin(), g_pCompositor->m_windows.end(), owner);
+        const auto ownerZ  = ownerIt == g_pCompositor->m_windows.end() ? 0ULL : static_cast<size_t>(std::distance(g_pCompositor->m_windows.begin(), ownerIt));
+
         const float hoverHeightPad = std::max<Hyprlang::INT>(0, **PHITH);
         const float hoverOffsetY   = **POFFY;
         const float occluderMargin = std::max<Hyprlang::INT>(0, **POCCMARGIN);
@@ -329,17 +332,11 @@ CBox CHyprPill::visibleBoxGlobal() const {
             if (clippedRight <= clippedLeft)
                 continue;
 
-            const float overlapLeft   = std::max(occlusionLeft, candidateLeft);
-            const float overlapRight  = std::min(occlusionRight, candidateRight);
-            const float overlapTop    = std::max(occlusionTop, candidateTop);
-            const float overlapBottom = std::min(occlusionBottom, candidateBottom);
-            if (overlapRight <= overlapLeft || overlapBottom <= overlapTop)
-                continue;
+            const auto candidateIt = std::find(g_pCompositor->m_windows.begin(), g_pCompositor->m_windows.end(), candidate);
+            const auto candidateZ  = candidateIt == g_pCompositor->m_windows.end() ? 0ULL : static_cast<size_t>(std::distance(g_pCompositor->m_windows.begin(), candidateIt));
 
-            const Vector2D overlapSample{(overlapLeft + overlapRight) * 0.5F, (overlapTop + overlapBottom) * 0.5F};
-            const auto     topWindowAtOverlap = g_pCompositor->vectorToWindowUnified(
-                overlapSample, Desktop::View::RESERVED_EXTENTS | Desktop::View::INPUT_EXTENTS | Desktop::View::ALLOW_FLOATING);
-            if (topWindowAtOverlap != candidate)
+            // Only dodge windows that are stacked above the owner.
+            if (candidateZ <= ownerZ)
                 continue;
 
             occluders.push_back({clippedLeft, clippedRight});
