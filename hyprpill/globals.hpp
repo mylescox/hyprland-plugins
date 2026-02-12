@@ -10,6 +10,7 @@ struct SGlobalState {
     std::vector<WP<CHyprPill>> pills;
     uint32_t                   noPillRuleIdx    = 0;
     uint32_t                   pillColorRuleIdx = 0;
+    WP<CHyprPill>              dragPill;
 };
 
 inline UP<SGlobalState> g_pGlobalState;
