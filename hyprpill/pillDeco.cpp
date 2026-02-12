@@ -246,14 +246,16 @@ CBox CHyprPill::visibleBoxGlobal() const {
 
     const auto windowLeft = static_cast<float>(box.x);
     const auto windowRight = static_cast<float>(box.x + box.w);
-    const auto centerX = box.x + box.w / 2.F;
+    const float centerX = static_cast<float>(box.x + box.w / 2.F);
     const auto desiredWidth = std::max<int>(1, std::lround(m_width > 1.F ? m_width : **PWIDTH));
     box.w = std::min<int>(desiredWidth, std::max<int>(1, std::lround(windowRight - windowLeft)));
     box.h              = std::max<int>(1, std::lround(m_height));
 
     if (m_dragGeometryLocked && (m_dragPending || m_draggingThis)) {
         box.w = std::clamp(m_dragLockedResolvedW, 1, std::max<int>(1, std::lround(windowRight - windowLeft)));
-        box.x = std::clamp(m_dragLockedResolvedX, std::lround(windowLeft), std::lround(windowRight - box.w));
+        const int minX = static_cast<int>(std::lround(windowLeft));
+        const int maxX = static_cast<int>(std::lround(windowRight - box.w));
+        box.x = std::clamp(m_dragLockedResolvedX, minX, maxX);
         box.y = std::lround(box.y - box.h - m_offsetY);
         return box;
     }
@@ -404,7 +406,8 @@ CBox CHyprPill::visibleBoxGlobal() const {
     std::tie(resolvedCenter, resolvedWidth) = solveConstrained(resolvedWidth, dodging);
 
     box.w = std::max<int>(1, std::lround(resolvedWidth));
-    box.x = std::clamp(std::lround(resolvedCenter - box.w / 2.F), std::lround(windowLeft), std::lround(windowRight - box.w));
+    box.x = std::clamp(static_cast<int>(std::lround(resolvedCenter - box.w / 2.F)), static_cast<int>(std::lround(windowLeft)),
+                       static_cast<int>(std::lround(windowRight - box.w)));
 
     m_lastFrameDodging   = dodging;
     m_lastFrameResolvedX = box.x;
