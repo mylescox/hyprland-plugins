@@ -171,7 +171,8 @@ void CHyprPill::renderPass(PHLMONITOR pMonitor, const float& a) {
         return;
 
     const auto globalBox = visibleBoxGlobal();
-    auto       box       = globalBox.translate(-pMonitor->m_position);
+    auto       box       = globalBox;
+    box.translate(-pMonitor->m_position);
     if (box.w < 1 || box.h < 1)
         return;
 
