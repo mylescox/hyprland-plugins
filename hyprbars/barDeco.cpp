@@ -23,6 +23,43 @@ uint32_t barEdgeFromConfig(const std::string& edge) {
 }
 }
 
+uint32_t CHyprBar::getBarEdge() const {
+    static auto* const PBAREDGE = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprbars:bar_edge")->getDataStaticPtr();
+    return barEdgeFromConfig(*PBAREDGE);
+}
+
+int CHyprBar::getConfiguredBarWidth() const {
+    static auto* const PBARWIDTH = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprbars:bar_width")->getDataStaticPtr();
+    return **PBARWIDTH == -1 ? -1 : std::max(1, **PBARWIDTH);
+}
+
+CBox CHyprBar::getResolvedBarBox() const {
+    static auto* const PVOFFSET = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprbars:bar_vertical_offset")->getDataStaticPtr();
+
+    if (!validMapped(m_pWindow))
+        return {};
+
+    const auto EDGE = getBarEdge();
+
+    CBox box = m_bAssignedBox;
+    box.translate(g_pDecorationPositioner->getEdgeDefinedPoint(EDGE, m_pWindow.lock()));
+
+    if (**PVOFFSET != 0)
+        box.y += EDGE == DECORATION_EDGE_BOTTOM ? **PVOFFSET : -**PVOFFSET;
+
+    const auto PWORKSPACE      = m_pWindow->m_workspace;
+    const auto WORKSPACEOFFSET = PWORKSPACE && !m_pWindow->m_pinned ? PWORKSPACE->m_renderOffset->value() : Vector2D();
+    box.translate(WORKSPACEOFFSET);
+
+    return box;
+}
+
+Vector2D CHyprBar::getButtonLogicalPos(const float barWidth, const float barHeight, const float buttonSize, const float offset, const float buttonPadding,
+                                       const bool buttonsRight) const {
+    // bar/button values are in logical (unscaled) pixels; callers can scale the result where needed.
+    return Vector2D{buttonsRight ? barWidth - buttonPadding - buttonSize - offset : offset, getBarContentY(barHeight, buttonSize)}.floor();
+}
+
 CHyprBar::CHyprBar(PHLWINDOW pWindow) : IHyprWindowDecoration(pWindow) {
     m_pWindow = pWindow;
 
@@ -65,14 +102,9 @@ SDecorationPositioningInfo CHyprBar::getPositioningInfo() {
     static auto* const         PHEIGHT     = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprbars:bar_height")->getDataStaticPtr();
     static auto* const         PENABLED    = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprbars:enabled")->getDataStaticPtr();
     static auto* const         PPRECEDENCE = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprbars:bar_precedence_over_border")->getDataStaticPtr();
-    static auto* const         PBARWIDTH   = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprbars:bar_width")->getDataStaticPtr();
-    static auto* const         PBAREDGE    = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprbars:bar_edge")->getDataStaticPtr();
-    static auto* const         PVOFFSET    = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprbars:bar_vertical_offset")->getDataStaticPtr();
 
-    const auto                 EDGE        = barEdgeFromConfig(*PBAREDGE);
+    const auto                 EDGE        = getBarEdge();
     const auto                 HEIGHT      = m_hidden || !**PENABLED ? 0 : **PHEIGHT;
-    const auto                 WIDTH       = **PBARWIDTH == -1 ? -1 : std::max(1, **PBARWIDTH);
-    (void)PVOFFSET;
 
     SDecorationPositioningInfo info;
     info.policy         = m_hidden ? DECORATION_POSITION_ABSOLUTE : DECORATION_POSITION_STICKY;
@@ -80,20 +112,18 @@ SDecorationPositioningInfo CHyprBar::getPositioningInfo() {
     info.priority       = **PPRECEDENCE ? 10005 : 5000;
     info.reserved       = true;
     info.desiredExtents = EDGE == DECORATION_EDGE_BOTTOM ? SBoxExtents{{0, 0}, {0, HEIGHT}} : SBoxExtents{{0, HEIGHT}, {0, 0}};
-    (void)WIDTH;
     return info;
 }
 
 void CHyprBar::onPositioningReply(const SDecorationPositioningReply& reply) {
-    static auto* const PBARWIDTH = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprbars:bar_width")->getDataStaticPtr();
-
     if (reply.assignedGeometry.size() != m_bAssignedBox.size())
         m_bWindowSizeChanged = true;
 
     m_bAssignedBox = reply.assignedGeometry;
 
-    if (**PBARWIDTH != -1 && **PBARWIDTH > 0)
-        m_bAssignedBox.w = std::max(1, **PBARWIDTH);
+    const auto configuredWidth = getConfiguredBarWidth();
+    if (configuredWidth > 0)
+        m_bAssignedBox.w = configuredWidth;
 }
 
 std::string CHyprBar::getDisplayName() {
@@ -292,10 +322,11 @@ void CHyprBar::handleMovement() {
 bool CHyprBar::doButtonPress(Hyprlang::INT* const* PBARPADDING, Hyprlang::INT* const* PBARBUTTONPADDING, Hyprlang::INT* const* PHEIGHT, Vector2D COORDS, const bool BUTTONSRIGHT) {
     //check if on a button
     float offset = **PBARPADDING;
+    const auto barWidth = static_cast<float>(assignedBoxGlobal().w);
+    const auto barHeight = static_cast<float>(**PHEIGHT);
 
     for (auto& b : g_pGlobalState->buttons) {
-        const auto BARBUF     = Vector2D{(int)assignedBoxGlobal().w, **PHEIGHT};
-        Vector2D   currentPos = Vector2D{(BUTTONSRIGHT ? BARBUF.x - **PBARBUTTONPADDING - b.size - offset : offset), getBarContentY(BARBUF.y, b.size)}.floor();
+        Vector2D currentPos = getButtonLogicalPos(barWidth, barHeight, b.size, offset, static_cast<float>(**PBARBUTTONPADDING), BUTTONSRIGHT);
 
         if (VECINRECT(COORDS, currentPos.x, currentPos.y, currentPos.x + b.size + **PBARBUTTONPADDING, currentPos.y + b.size)) {
             // hit on close
@@ -566,6 +597,9 @@ void CHyprBar::renderBarButtonsText(CBox* barBox, const float scale, const float
 
     int                offset        = **PBARPADDING * scale;
     float              noScaleOffset = **PBARPADDING;
+    const auto         barWidth      = static_cast<float>(assignedBoxGlobal().w);
+    const auto         barHeight     = static_cast<float>(**PHEIGHT);
+    const auto         buttonPadding = static_cast<float>(**PBARBUTTONPADDING);
 
     for (size_t i = 0; i < visibleCount; ++i) {
         auto&      button           = g_pGlobalState->buttons[i];
@@ -573,10 +607,7 @@ void CHyprBar::renderBarButtonsText(CBox* barBox, const float scale, const float
         const auto scaledButtonsPad = **PBARBUTTONPADDING * scale;
 
         // check if hovering here
-        const auto BARBUF     = Vector2D{(int)assignedBoxGlobal().w, **PHEIGHT};
-        Vector2D   currentPos = Vector2D{(BUTTONSRIGHT ? BARBUF.x - **PBARBUTTONPADDING - button.size - noScaleOffset : noScaleOffset),
-                                           getBarContentY(BARBUF.y, button.size)}
-                                 .floor();
+        Vector2D   currentPos = getButtonLogicalPos(barWidth, barHeight, button.size, noScaleOffset, buttonPadding, BUTTONSRIGHT);
         bool       hovering   = VECINRECT(COORDS, currentPos.x, currentPos.y, currentPos.x + button.size + **PBARBUTTONPADDING, currentPos.y + button.size);
         noScaleOffset += **PBARBUTTONPADDING + button.size;
 
@@ -783,24 +814,7 @@ uint64_t CHyprBar::getDecorationFlags() {
 }
 
 CBox CHyprBar::assignedBoxGlobal() {
-    static auto* const PBAREDGE = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprbars:bar_edge")->getDataStaticPtr();
-    static auto* const PVOFFSET = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprbars:bar_vertical_offset")->getDataStaticPtr();
-
-    if (!validMapped(m_pWindow))
-        return {};
-
-    const auto EDGE = barEdgeFromConfig(*PBAREDGE);
-
-    CBox box = m_bAssignedBox;
-    box.translate(g_pDecorationPositioner->getEdgeDefinedPoint(EDGE, m_pWindow.lock()));
-
-    if (**PVOFFSET != 0)
-        box.y += EDGE == DECORATION_EDGE_BOTTOM ? **PVOFFSET : -**PVOFFSET;
-
-    const auto PWORKSPACE      = m_pWindow->m_workspace;
-    const auto WORKSPACEOFFSET = PWORKSPACE && !m_pWindow->m_pinned ? PWORKSPACE->m_renderOffset->value() : Vector2D();
-
-    return box.translate(WORKSPACEOFFSET);
+    return getResolvedBarBox();
 }
 
 PHLWINDOW CHyprBar::getOwner() {
@@ -837,12 +851,14 @@ void CHyprBar::damageOnButtonHover() {
     const bool         BUTTONSRIGHT      = std::string{*PALIGNBUTTONS} != "left";
 
     float              offset = **PBARPADDING;
+    const auto         barWidth = static_cast<float>(assignedBoxGlobal().w);
+    const auto         barHeight = static_cast<float>(**PHEIGHT);
+    const auto         buttonPadding = static_cast<float>(**PBARBUTTONPADDING);
 
     const auto         COORDS = cursorRelativeToBar();
 
     for (auto& b : g_pGlobalState->buttons) {
-        const auto BARBUF     = Vector2D{(int)assignedBoxGlobal().w, **PHEIGHT};
-        Vector2D   currentPos = Vector2D{(BUTTONSRIGHT ? BARBUF.x - **PBARBUTTONPADDING - b.size - offset : offset), getBarContentY(BARBUF.y, b.size)}.floor();
+        Vector2D   currentPos = getButtonLogicalPos(barWidth, barHeight, b.size, offset, buttonPadding, BUTTONSRIGHT);
 
         bool       hover = VECINRECT(COORDS, currentPos.x, currentPos.y, currentPos.x + b.size + **PBARBUTTONPADDING, currentPos.y + b.size);
 
