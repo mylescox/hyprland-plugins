@@ -123,7 +123,20 @@ void CHyprPill::renderPass(PHLMONITOR pMonitor, const float& a) {
 
     g_pHyprOpenGL->renderRect(box, color, {.round = m_radius * pMonitor->m_scale, .roundingPower = m_pWindow->roundingPower()});
 
-    if (m_targetState != m_currentState)
+    static auto* const PDEBUGHOVER = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:debug_hitbox_hover")->getDataStaticPtr();
+    static auto* const PDEBUGCLICK = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:debug_hitbox_click")->getDataStaticPtr();
+
+    if (**PDEBUGHOVER) {
+        auto hoverBox = hoverHitboxGlobal().translate(-pMonitor->m_position);
+        g_pHyprOpenGL->renderRect(hoverBox, CHyprColor{0.35F, 0.8F, 1.F, 0.22F}, {.round = 0.F});
+    }
+
+    if (**PDEBUGCLICK) {
+        auto clickBox = clickHitboxGlobal().translate(-pMonitor->m_position);
+        g_pHyprOpenGL->renderRect(clickBox, CHyprColor{1.F, 0.5F, 0.3F, 0.22F}, {.round = 0.F});
+    }
+
+    if (m_targetState != m_currentState || **PDEBUGHOVER || **PDEBUGCLICK)
         damageEntire();
 }
 
@@ -155,20 +168,40 @@ CBox CHyprPill::visibleBoxGlobal() const {
     return box;
 }
 
-CBox CHyprPill::hitboxGlobal() const {
-    static auto* const PHITW = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:pill_hitbox_width")->getDataStaticPtr();
-    static auto* const PHITH = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:pill_hitbox_height")->getDataStaticPtr();
+CBox CHyprPill::hoverHitboxGlobal() const {
+    static auto* const PHITW = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:hover_hitbox_width")->getDataStaticPtr();
+    static auto* const PHITH = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:hover_hitbox_height")->getDataStaticPtr();
+    static auto* const POFFY = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:hover_hitbox_offset_y")->getDataStaticPtr();
 
     auto               box = visibleBoxGlobal();
     box.x -= **PHITW;
-    box.y -= **PHITH;
     box.w += **PHITW * 2;
     box.h += **PHITH * 2;
+    box.y = std::lround(box.y - **PHITH + **POFFY);
+    return box;
+}
+
+CBox CHyprPill::clickHitboxGlobal() const {
+    static auto* const PHITW = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:click_hitbox_width")->getDataStaticPtr();
+    static auto* const PHITH = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:click_hitbox_height")->getDataStaticPtr();
+    static auto* const POFFY = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:click_hitbox_offset_y")->getDataStaticPtr();
+
+    auto               box = visibleBoxGlobal();
+    box.x -= **PHITW;
+    box.w += **PHITW * 2;
+    box.h += **PHITH * 2;
+    box.y = std::lround(box.y - **PHITH + **POFFY);
     return box;
 }
 
 Vector2D CHyprPill::cursorRelativeToPill() const {
-    return g_pInputManager->getMouseCoordsInternal() - hitboxGlobal().pos();
+    return g_pInputManager->getMouseCoordsInternal() - clickHitboxGlobal().pos();
+}
+
+bool CHyprPill::isHovering() const {
+    const auto coords = g_pInputManager->getMouseCoordsInternal();
+    const auto hb     = hoverHitboxGlobal();
+    return VECINRECT(coords, hb.x, hb.y, hb.x + hb.w, hb.y + hb.h);
 }
 
 bool CHyprPill::inputIsValid() {
@@ -185,7 +218,8 @@ bool CHyprPill::inputIsValid() {
 }
 
 void CHyprPill::beginDrag(SCallbackInfo& info, const Vector2D& coords) {
-    if (!VECINRECT(coords, 0, 0, hitboxGlobal().w, hitboxGlobal().h))
+    const auto clickHitbox = clickHitboxGlobal();
+    if (!VECINRECT(coords, 0, 0, clickHitbox.w, clickHitbox.h))
         return;
 
     const auto PWINDOW = m_pWindow.lock();
@@ -245,7 +279,7 @@ void CHyprPill::onTouchDown(SCallbackInfo& info, ITouch::SDownEvent e) {
 
     auto PMONITOR     = m_pWindow->m_monitor.lock();
     PMONITOR          = PMONITOR ? PMONITOR : Desktop::focusState()->monitor();
-    const auto COORDS = Vector2D(PMONITOR->m_position.x + e.pos.x * PMONITOR->m_size.x, PMONITOR->m_position.y + e.pos.y * PMONITOR->m_size.y) - hitboxGlobal().pos();
+    const auto COORDS = Vector2D(PMONITOR->m_position.x + e.pos.x * PMONITOR->m_size.x, PMONITOR->m_position.y + e.pos.y * PMONITOR->m_size.y) - clickHitboxGlobal().pos();
     beginDrag(info, COORDS);
 }
 
@@ -257,13 +291,13 @@ void CHyprPill::onTouchUp(SCallbackInfo& info, ITouch::SUpEvent e) {
 }
 
 void CHyprPill::onMouseMove(Vector2D coords) {
-    const auto hb = hitboxGlobal();
-    m_hovered = VECINRECT(coords, hb.x, hb.y, hb.x + hb.w, hb.y + hb.h);
+    const auto hb = hoverHitboxGlobal();
+    m_hovered     = VECINRECT(coords, hb.x, hb.y, hb.x + hb.w, hb.y + hb.h);
 
     if (!m_dragPending || m_touchEv || !validMapped(m_pWindow))
         return;
 
-    m_dragPending = false;
+    m_dragPending  = false;
     m_draggingThis = true;
     g_pKeybindManager->m_dispatchers["mouse"]("1movewindow");
 }
@@ -290,6 +324,9 @@ void CHyprPill::updateStateAndAnimate() {
     static auto* const PWIDTH          = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:pill_width")->getDataStaticPtr();
     static auto* const PHEIGHT         = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:pill_height")->getDataStaticPtr();
     static auto* const PRADIUS         = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:pill_radius")->getDataStaticPtr();
+    static auto* const PWIDTHINACTIVE  = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:pill_width_inactive")->getDataStaticPtr();
+    static auto* const PHEIGHTINACTIVE = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:pill_height_inactive")->getDataStaticPtr();
+    static auto* const PRADIUSINACTIVE = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:pill_radius_inactive")->getDataStaticPtr();
     static auto* const PWIDTHHOVER     = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:pill_width_hover")->getDataStaticPtr();
     static auto* const PHEIGHTHOVER    = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:pill_height_hover")->getDataStaticPtr();
     static auto* const PCOLACTIVE      = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:pill_color_active")->getDataStaticPtr();
@@ -304,6 +341,8 @@ void CHyprPill::updateStateAndAnimate() {
     static auto* const PDURPRESS       = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:anim_duration_press")->getDataStaticPtr();
 
     const bool focused = Desktop::focusState()->window() == m_pWindow.lock();
+
+    m_hovered = isHovering();
 
     if (m_dragPending || m_draggingThis)
         m_targetState = ePillVisualState::PRESSED;
@@ -327,9 +366,9 @@ void CHyprPill::updateStateAndAnimate() {
         m_fromColor    = m_color;
     }
 
-    float toWidth  = **PWIDTH;
-    float toHeight = **PHEIGHT;
-    float toRadius = **PRADIUS;
+    float toWidth   = focused ? **PWIDTH : **PWIDTHINACTIVE;
+    float toHeight  = focused ? **PHEIGHT : **PHEIGHTINACTIVE;
+    float toRadius  = focused ? **PRADIUS : **PRADIUSINACTIVE;
     float toOpacity = focused ? **POPACTIVE : **POPINACTIVE;
     float toOffsetY = focused ? **POFFACTIVE : **POFFINACTIVE;
     CHyprColor toColor = focused ? CHyprColor{(uint64_t)**PCOLACTIVE} : CHyprColor{(uint64_t)**PCOLINACTIVE};

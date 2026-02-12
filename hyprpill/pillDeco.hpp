@@ -38,7 +38,8 @@ class CHyprPill : public IHyprWindowDecoration {
 
     void                               renderPass(PHLMONITOR pMonitor, float const& a);
     CBox                               visibleBoxGlobal() const;
-    CBox                               hitboxGlobal() const;
+    CBox                               hoverHitboxGlobal() const;
+    CBox                               clickHitboxGlobal() const;
 
     WP<CHyprPill>                      m_self;
 
@@ -54,6 +55,7 @@ class CHyprPill : public IHyprWindowDecoration {
     void                      updateStateAndAnimate();
     bool                      inputIsValid();
     Vector2D                  cursorRelativeToPill() const;
+    bool                      isHovering() const;
 
     PHLWINDOWREF              m_pWindow;
     CBox                      m_bAssignedBox;
