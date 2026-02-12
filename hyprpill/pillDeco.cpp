@@ -307,13 +307,13 @@ void CHyprPill::endDrag(SCallbackInfo& info) {
 }
 
 void CHyprPill::onMouseButton(SCallbackInfo& info, IPointer::SButtonEvent e) {
-    if (!inputIsValid()) {
-        updateCursorShape();
+    if (e.state != WL_POINTER_BUTTON_STATE_PRESSED) {
+        endDrag(info);
         return;
     }
 
-    if (e.state != WL_POINTER_BUTTON_STATE_PRESSED) {
-        endDrag(info);
+    if (!inputIsValid()) {
+        updateCursorShape();
         return;
     }
 
@@ -348,8 +348,11 @@ void CHyprPill::onMouseMove(SCallbackInfo& info, Vector2D coords) {
         return;
     }
 
-    if (!inputIsValid()) {
+    const bool activeDrag = m_dragPending || m_draggingThis;
+    if (!inputIsValid(activeDrag)) {
         m_hovered = false;
+        if (activeDrag)
+            info.cancelled = true;
         updateCursorShape(coords);
         return;
     }
