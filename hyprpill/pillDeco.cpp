@@ -255,11 +255,8 @@ void CHyprPill::endDrag(SCallbackInfo& info) {
 
     m_cancelledDown = false;
 
-    if (m_draggingThis) {
-        g_pKeybindManager->m_dispatchers["mouse"]("0movewindow");
-        if (m_touchEv)
-            g_pKeybindManager->m_dispatchers["settiled"]("activewindow");
-    }
+    if (m_draggingThis && m_touchEv)
+        g_pKeybindManager->m_dispatchers["settiled"]("activewindow");
 
     m_dragPending  = false;
     m_draggingThis = false;
@@ -332,9 +329,8 @@ void CHyprPill::onMouseMove(SCallbackInfo& info, Vector2D coords) {
         Desktop::focusState()->fullWindowFocus(m_pWindow.lock());
 
     m_dragPending  = false;
-    m_draggingThis = true;
     info.cancelled = true;
-    g_pKeybindManager->m_dispatchers["mouse"]("1movewindow");
+    updateDragPosition(coords);
 }
 
 void CHyprPill::onTouchMove(SCallbackInfo& info, ITouch::SMotionEvent e) {
@@ -345,13 +341,17 @@ void CHyprPill::onTouchMove(SCallbackInfo& info, ITouch::SMotionEvent e) {
     PMONITOR          = PMONITOR ? PMONITOR : Desktop::focusState()->monitor();
     const auto COORDS = Vector2D(PMONITOR->m_position.x + e.pos.x * PMONITOR->m_size.x, PMONITOR->m_position.y + e.pos.y * PMONITOR->m_size.y);
 
-    if (!m_draggingThis) {
+    updateDragPosition(COORDS);
+}
+
+void CHyprPill::updateDragPosition(const Vector2D& coords) {
+    if (!m_draggingThis && !m_pWindow->m_isFloating) {
         g_pKeybindManager->m_dispatchers["setfloating"]("activewindow");
         g_pKeybindManager->m_dispatchers["resizewindowpixel"]("exact 50% 50%,activewindow");
         g_pKeybindManager->m_dispatchers["pin"]("activewindow");
     }
 
-    g_pKeybindManager->m_dispatchers["movewindowpixel"](std::format("exact {} {},activewindow", (int)(COORDS.x - (visibleBoxGlobal().w / 2)), (int)COORDS.y));
+    g_pKeybindManager->m_dispatchers["movewindowpixel"](std::format("exact {} {},activewindow", (int)(coords.x - (visibleBoxGlobal().w / 2)), (int)coords.y));
     m_draggingThis = true;
 }
 
