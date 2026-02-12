@@ -121,19 +121,20 @@ void CHyprPill::renderPass(PHLMONITOR pMonitor, const float& a) {
     CHyprColor color = m_forcedColor.value_or(m_color);
     color.a *= std::clamp(m_opacity * a, 0.F, 1.F);
 
-    g_pHyprOpenGL->renderRect(box, color, {.round = m_radius * pMonitor->m_scale, .roundingPower = m_pWindow->roundingPower()});
+    g_pHyprOpenGL->renderRect(box, color,
+        {.round = std::max(0, std::lround(m_radius * pMonitor->m_scale)), .roundingPower = m_pWindow->roundingPower()});
 
     static auto* const PDEBUGHOVER = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:debug_hitbox_hover")->getDataStaticPtr();
     static auto* const PDEBUGCLICK = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:debug_hitbox_click")->getDataStaticPtr();
 
     if (**PDEBUGHOVER) {
         auto hoverBox = hoverHitboxGlobal().translate(-pMonitor->m_position);
-        g_pHyprOpenGL->renderRect(hoverBox, CHyprColor{0.35F, 0.8F, 1.F, 0.22F}, {.round = 0.F});
+        g_pHyprOpenGL->renderRect(hoverBox, CHyprColor{0.35F, 0.8F, 1.F, 0.22F}, {.round = 0});
     }
 
     if (**PDEBUGCLICK) {
         auto clickBox = clickHitboxGlobal().translate(-pMonitor->m_position);
-        g_pHyprOpenGL->renderRect(clickBox, CHyprColor{1.F, 0.5F, 0.3F, 0.22F}, {.round = 0.F});
+        g_pHyprOpenGL->renderRect(clickBox, CHyprColor{1.F, 0.5F, 0.3F, 0.22F}, {.round = 0});
     }
 
     if (m_targetState != m_currentState || **PDEBUGHOVER || **PDEBUGCLICK)
