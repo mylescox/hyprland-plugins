@@ -237,18 +237,22 @@ CBox CHyprPill::visibleBoxGlobal() const {
     static auto* const POFFY   = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:hover_hitbox_offset_y")->getDataStaticPtr();
     static auto* const POCCMARGIN = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:dodge_occluder_margin")->getDataStaticPtr();
 
-    CBox box = m_bAssignedBox;
-    box.translate(g_pDecorationPositioner->getEdgeDefinedPoint(DECORATION_EDGE_TOP, m_pWindow.lock()));
+    const auto owner = m_pWindow.lock();
+    if (!owner)
+        return {};
 
-    const auto PWORKSPACE      = m_pWindow->m_workspace;
-    const auto WORKSPACEOFFSET = PWORKSPACE && !m_pWindow->m_pinned ? PWORKSPACE->m_renderOffset->value() : Vector2D();
+    CBox box = m_bAssignedBox;
+    box.translate(g_pDecorationPositioner->getEdgeDefinedPoint(DECORATION_EDGE_TOP, owner));
+
+    const auto PWORKSPACE      = owner->m_workspace;
+    const auto WORKSPACEOFFSET = PWORKSPACE && !owner->m_pinned ? PWORKSPACE->m_renderOffset->value() : Vector2D();
     box.translate(WORKSPACEOFFSET);
 
-    const auto windowLeft = static_cast<float>(box.x);
-    const auto windowRight = static_cast<float>(box.x + box.w);
-    const float centerX = static_cast<float>(box.x + box.w / 2.F);
+    const float windowLeft = owner->m_realPosition->value().x + owner->m_floatingOffset.x + WORKSPACEOFFSET.x;
+    const float windowRight = windowLeft + std::max(1.F, owner->m_realSize->value().x);
+    const float centerX = windowLeft + (windowRight - windowLeft) * 0.5F;
     const auto desiredWidth = std::max<int>(1, std::lround(m_width > 1.F ? m_width : **PWIDTH));
-    box.w = std::min<int>(desiredWidth, std::max<int>(1, std::lround(windowRight - windowLeft)));
+    box.w = std::min<int>(desiredWidth, std::max<int>(1, static_cast<int>(std::lround(windowRight - windowLeft))));
     box.h              = std::max<int>(1, std::lround(m_height));
 
     if (m_dragGeometryLocked && (m_dragPending || m_draggingThis)) {
@@ -263,8 +267,7 @@ CBox CHyprPill::visibleBoxGlobal() const {
     std::vector<SHorizontalInterval> occluders;
     occluders.reserve(g_pCompositor->m_windows.size());
 
-    const auto owner = m_pWindow.lock();
-    const bool canDetectOccluders = owner && owner->m_workspace && owner->m_workspace->isVisible();
+    const bool canDetectOccluders = owner->m_workspace && owner->m_workspace->isVisible();
     if (canDetectOccluders) {
         const float hoverWidthPad  = std::max<Hyprlang::INT>(0, **PHITW);
         const float hoverHeightPad = std::max<Hyprlang::INT>(0, **PHITH);
