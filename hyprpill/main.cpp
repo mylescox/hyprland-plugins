@@ -73,6 +73,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:hover_hitbox_width", Hyprlang::INT{10});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:hover_hitbox_height", Hyprlang::INT{8});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:hover_hitbox_offset_y", Hyprlang::INT{0});
+    HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:dodge_occluder_margin", Hyprlang::INT{4});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:click_hitbox_width", Hyprlang::INT{10});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:click_hitbox_height", Hyprlang::INT{8});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:click_hitbox_offset_y", Hyprlang::INT{0});
@@ -94,6 +95,8 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:anim_duration_hover", Hyprlang::INT{140});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:anim_duration_press", Hyprlang::INT{100});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:anim_easing", Hyprlang::STRING{"easeInOut"});
+    HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:geometry_lerp_speed", Hyprlang::FLOAT{16.F});
+    HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:geometry_lerp_easing", Hyprlang::STRING{"easeInOut"});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:pill_blur", Hyprlang::INT{0});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:pill_part_of_window", Hyprlang::INT{0});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:pill_precedence_over_border", Hyprlang::INT{0});

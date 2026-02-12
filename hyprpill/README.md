@@ -31,6 +31,7 @@ plugin {
     hover_hitbox_width = 10
     hover_hitbox_height = 8
     hover_hitbox_offset_y = 0
+    dodge_occluder_margin = 4
 
     click_hitbox_width = 10
     click_hitbox_height = 8
@@ -59,6 +60,8 @@ plugin {
     anim_duration_hover = 140
     anim_duration_press = 100
     anim_easing = easeInOut
+    geometry_lerp_speed = 16.0
+    geometry_lerp_easing = easeInOut
 
     pill_blur = false
     pill_part_of_window = false
@@ -85,6 +88,7 @@ All config options are in `plugin:hyprpill`.
 | `hover_hitbox_width` | int | extra horizontal hover hitbox padding | `10` |
 | `hover_hitbox_height` | int | extra vertical hover hitbox padding | `8` |
 | `hover_hitbox_offset_y` | int | hover hitbox y offset from visible pill | `0` |
+| `dodge_occluder_margin` | int | extra horizontal padding used when avoiding top-edge occluding windows | `4` |
 | `click_hitbox_width` | int | extra horizontal click/drag hitbox padding | `10` |
 | `click_hitbox_height` | int | extra vertical click/drag hitbox padding | `8` |
 | `click_hitbox_offset_y` | int | click hitbox y offset from visible pill | `0` |
@@ -106,6 +110,8 @@ All config options are in `plugin:hyprpill`.
 | `anim_duration_hover` | int | hover animation duration (ms) | `140` |
 | `anim_duration_press` | int | press/drag animation duration (ms) | `100` |
 | `anim_easing` | str | animation easing selector | `easeInOut` |
+| `geometry_lerp_speed` | float | speed multiplier for dodge geometry lerp (x/y/w/h) | `16.0` |
+| `geometry_lerp_easing` | str | easing for dodge geometry lerp (`linear`, `easeIn`, `easeOut`, `easeInOut`) | `easeInOut` |
 | `pill_blur` | bool | enable blur pass integration | `false` |
 | `pill_part_of_window` | bool | include pill in main window extents | `false` |
 | `pill_precedence_over_border` | bool | draw above border decoration | `false` |
