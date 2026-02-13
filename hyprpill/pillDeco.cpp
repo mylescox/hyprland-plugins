@@ -557,6 +557,22 @@ bool CHyprPill::isHovering() const {
     return VECINRECT(coords, hb.x, hb.y, hb.x + hb.w, hb.y + hb.h);
 }
 
+bool CHyprPill::pointerInputTargetsOwner(const Vector2D& coords, bool hoverHitbox) const {
+    const auto owner = m_pWindow.lock();
+    if (!owner)
+        return false;
+
+    const auto WINDOWATCURSOR = g_pCompositor->vectorToWindowUnified(coords, Desktop::View::RESERVED_EXTENTS | Desktop::View::INPUT_EXTENTS | Desktop::View::ALLOW_FLOATING);
+
+    // Prefer strict top-window matching when compositor can resolve one.
+    if (WINDOWATCURSOR)
+        return WINDOWATCURSOR == owner;
+
+    // Fallback path: allow pill-owned input regions in case the resolver does not include this deco geometry.
+    const auto hb = hoverHitbox ? hoverHitboxGlobal() : clickHitboxGlobal();
+    return VECINRECT(coords, hb.x, hb.y, hb.x + hb.w, hb.y + hb.h);
+}
+
 bool CHyprPill::inputIsValid(bool ignoreSeatGrab) {
     static auto* const PENABLED = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:enabled")->getDataStaticPtr();
 
@@ -713,6 +729,11 @@ void CHyprPill::onMouseButton(SCallbackInfo& info, IPointer::SButtonEvent e) {
     }
 
     const auto coordsGlobal = g_pInputManager->getMouseCoordsInternal();
+    if (!pointerInputTargetsOwner(coordsGlobal, false)) {
+        updateCursorShape(coordsGlobal);
+        return;
+    }
+
     const auto clickHitbox  = clickHitboxGlobal();
     if (!VECINRECT(coordsGlobal, clickHitbox.x, clickHitbox.y, clickHitbox.x + clickHitbox.w, clickHitbox.y + clickHitbox.h)) {
         updateCursorShape(coordsGlobal);
@@ -779,6 +800,15 @@ void CHyprPill::onMouseMove(SCallbackInfo& info, Vector2D coords) {
             Desktop::focusState()->fullWindowFocus(m_pWindow.lock());
 
         updateDragPosition(coords);
+        updateCursorShape(coords);
+        return;
+    }
+
+    if (!pointerInputTargetsOwner(coords, true)) {
+        const bool wasHovered = m_hovered;
+        m_hovered             = false;
+        if (m_hovered != wasHovered)
+            damageEntire();
         updateCursorShape(coords);
         return;
     }
@@ -924,7 +954,8 @@ void CHyprPill::updateStateAndAnimate() {
 
     const bool focused = Desktop::focusState()->window() == m_pWindow.lock();
 
-    m_hovered = inputIsValid(true) && isHovering();
+    const auto mouseCoords = g_pInputManager->getMouseCoordsInternal();
+    m_hovered              = inputIsValid(true) && pointerInputTargetsOwner(mouseCoords, true) && isHovering();
 
     if (m_dragPending || m_draggingThis)
         m_targetState = ePillVisualState::PRESSED;
