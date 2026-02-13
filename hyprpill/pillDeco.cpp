@@ -322,6 +322,10 @@ CBox CHyprPill::visibleBoxGlobal() const {
             if (candidate->m_monitor != owner->m_monitor)
                 continue;
 
+            // Floating pills only dodge floating occluders.
+            if (owner->m_isFloating && !candidate->m_isFloating)
+                continue;
+
             const auto candidatePos  = candidate->m_realPosition->value() + candidate->m_floatingOffset;
             const auto candidateSize = candidate->m_realSize->value();
 
@@ -457,10 +461,16 @@ CBox CHyprPill::visibleBoxGlobal() const {
     if (dodging)
         std::tie(resolvedCenter, resolvedWidth) = solveConstrained(resolvedWidth, dodging);
 
-    const int targetW = std::max<int>(1, std::lround(resolvedWidth));
+    int targetW = std::max<int>(1, std::lround(resolvedWidth));
     const int targetH = std::max<int>(1, std::lround(m_height));
-    const int targetX = std::clamp(static_cast<int>(std::lround(resolvedCenter - targetW / 2.F)), static_cast<int>(std::lround(windowLeft)),
-                                   static_cast<int>(std::lround(windowRight - targetW)));
+    int targetX = std::clamp(static_cast<int>(std::lround(resolvedCenter - targetW / 2.F)), static_cast<int>(std::lround(windowLeft)),
+                             static_cast<int>(std::lround(windowRight - targetW)));
+
+    // Keep a dodging pill steady while hovered so repeated clicks don't chase a moving target.
+    if (dodging && m_hovered && m_lastFrameDodging) {
+        targetX = m_lastFrameResolvedX;
+        targetW = m_lastFrameResolvedW;
+    }
 
     m_lastFrameDodging   = dodging;
     m_lastFrameResolvedX = targetX;
@@ -545,6 +555,30 @@ bool CHyprPill::isHovering() const {
     const auto coords = g_pInputManager->getMouseCoordsInternal();
     const auto hb     = hoverHitboxGlobal();
     return VECINRECT(coords, hb.x, hb.y, hb.x + hb.w, hb.y + hb.h);
+}
+
+bool CHyprPill::pointerInputTargetsOwner(const Vector2D& coords, bool hoverHitbox) const {
+    const auto owner = m_pWindow.lock();
+    if (!owner)
+        return false;
+
+    const auto hb = hoverHitbox ? hoverHitboxGlobal() : clickHitboxGlobal();
+    const bool inPillHitbox = VECINRECT(coords, hb.x, hb.y, hb.x + hb.w, hb.y + hb.h);
+    if (!inPillHitbox)
+        return false;
+
+    const auto WINDOWATCURSOR = g_pCompositor->vectorToWindowUnified(coords, Desktop::View::RESERVED_EXTENTS | Desktop::View::INPUT_EXTENTS | Desktop::View::ALLOW_FLOATING);
+
+    if (WINDOWATCURSOR == owner)
+        return true;
+
+    // If resolver misses decoration-only geometry, allow direct hitbox interaction.
+    if (!WINDOWATCURSOR)
+        return true;
+
+    // If another window is reported under cursor, still allow interaction for the focused owner.
+    // This covers pills positioned above window content where window-picking may hit a lower tile.
+    return Desktop::focusState()->window() == owner;
 }
 
 bool CHyprPill::inputIsValid(bool ignoreSeatGrab) {
@@ -695,6 +729,11 @@ void CHyprPill::onMouseButton(SCallbackInfo& info, IPointer::SButtonEvent e) {
     }
 
     const auto coordsGlobal = g_pInputManager->getMouseCoordsInternal();
+    if (!pointerInputTargetsOwner(coordsGlobal, false)) {
+        updateCursorShape(coordsGlobal);
+        return;
+    }
+
     const auto clickHitbox  = clickHitboxGlobal();
     if (!VECINRECT(coordsGlobal, clickHitbox.x, clickHitbox.y, clickHitbox.x + clickHitbox.w, clickHitbox.y + clickHitbox.h)) {
         updateCursorShape(coordsGlobal);
@@ -761,6 +800,15 @@ void CHyprPill::onMouseMove(SCallbackInfo& info, Vector2D coords) {
             Desktop::focusState()->fullWindowFocus(m_pWindow.lock());
 
         updateDragPosition(coords);
+        updateCursorShape(coords);
+        return;
+    }
+
+    if (!pointerInputTargetsOwner(coords, true)) {
+        const bool wasHovered = m_hovered;
+        m_hovered             = false;
+        if (m_hovered != wasHovered)
+            damageEntire();
         updateCursorShape(coords);
         return;
     }
@@ -906,7 +954,8 @@ void CHyprPill::updateStateAndAnimate() {
 
     const bool focused = Desktop::focusState()->window() == m_pWindow.lock();
 
-    m_hovered = isHovering();
+    const auto mouseCoords = g_pInputManager->getMouseCoordsInternal();
+    m_hovered              = inputIsValid(true) && pointerInputTargetsOwner(mouseCoords, true) && isHovering();
 
     if (m_dragPending || m_draggingThis)
         m_targetState = ePillVisualState::PRESSED;
