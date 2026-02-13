@@ -103,6 +103,7 @@ class CHyprPill : public IHyprWindowDecoration {
     mutable bool              m_lastFrameDodging     = false;
     mutable int               m_lastFrameResolvedX   = 0;
     mutable int               m_lastFrameResolvedW   = 0;
+    mutable float             m_lastFrameDodgeOffset = 0.F;
 
     mutable bool              m_geometryAnimInitialized = false;
     mutable float             m_geometryAnimX           = 0.F;
@@ -113,6 +114,7 @@ class CHyprPill : public IHyprWindowDecoration {
     int                       m_dragLockedResolvedX  = 0;
     int                       m_dragLockedResolvedW  = 0;
     int                       m_dragLockedOffsetX    = 0;
+    float                     m_dragLockedDodgeOffset = 0.F;
 
     bool                      m_hasLastRenderBox     = false;
     CBox                      m_lastRenderBox;

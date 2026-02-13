@@ -459,16 +459,24 @@ CBox CHyprPill::visibleBoxGlobal() const {
 
     int targetW = std::max<int>(1, std::lround(resolvedWidth));
     const int targetH = std::max<int>(1, std::lround(m_height));
+    const int naturalCenterX = std::clamp(static_cast<int>(std::lround(centerX - targetW / 2.F)),
+                                          static_cast<int>(std::lround(windowLeft)),
+                                          static_cast<int>(std::lround(windowRight - targetW)));
     int targetX = std::clamp(static_cast<int>(std::lround(resolvedCenter - targetW / 2.F)), static_cast<int>(std::lround(windowLeft)),
                                    static_cast<int>(std::lround(windowRight - targetW)));
 
-    // If the cursor is hovering over the pill, freeze the dodge X position so
+    const float currentDodgeOffset = static_cast<float>(targetX - naturalCenterX);
+
+    // If the cursor is hovering over the pill, freeze only the dodge offset so
     // the pill does not slide out from under the mouse (e.g. when clicking to
-    // focus).  Only the X position is frozen; width and other animations
-    // (active/hover/inactive state transitions) continue to play normally.
+    // focus), while still allowing the base position to track the pill's
+    // animated width so the pill stays visually centered.
     if (m_hovered && m_geometryAnimInitialized) {
-        targetX = std::clamp(static_cast<int>(std::lround(m_geometryAnimX)), static_cast<int>(std::lround(windowLeft)),
+        targetX = std::clamp(naturalCenterX + static_cast<int>(std::lround(m_lastFrameDodgeOffset)),
+                             static_cast<int>(std::lround(windowLeft)),
                              static_cast<int>(std::lround(windowRight - targetW)));
+    } else {
+        m_lastFrameDodgeOffset = currentDodgeOffset;
     }
 
     m_lastFrameDodging   = dodging;
@@ -597,6 +605,7 @@ void CHyprPill::beginDrag(SCallbackInfo& info, const Vector2D& coordsGlobal) {
     m_dragLockedResolvedX = m_lastFrameResolvedX;
     m_dragLockedResolvedW = m_lastFrameResolvedW;
     m_dragLockedOffsetX   = m_lastFrameResolvedX - static_cast<int>(std::lround(PWINDOW->m_realPosition->value().x + PWINDOW->m_floatingOffset.x));
+    m_dragLockedDodgeOffset = m_lastFrameDodgeOffset;
 
     info.cancelled   = true;
     m_cancelledDown  = true;
@@ -623,13 +632,15 @@ void CHyprPill::endDrag(SCallbackInfo& info) {
         }
     }
 
-    // If still hovered after a drag that had locked geometry, restore the
-    // geometry animation X position so the hover-freeze keeps the pill in
-    // place instead of jumping to center on the next frame.
+    // If still hovered after a drag that had locked geometry, seed the
+    // geometry animation from the drag's locked position and restore the
+    // dodge offset so the hover-freeze keeps the pill in place instead of
+    // jumping to center on the next frame.
     if (m_hovered && m_dragGeometryLocked) {
         m_geometryAnimInitialized = true;
         m_geometryAnimX           = static_cast<float>(m_dragLockedResolvedX);
         m_geometryAnimLastTick    = Time::steadyNow();
+        m_lastFrameDodgeOffset    = m_dragLockedDodgeOffset;
     }
 
     m_dragPending        = false;
