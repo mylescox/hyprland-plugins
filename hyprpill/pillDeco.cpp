@@ -322,6 +322,10 @@ CBox CHyprPill::visibleBoxGlobal() const {
             if (candidate->m_monitor != owner->m_monitor)
                 continue;
 
+            // Floating pills only dodge floating occluders.
+            if (owner->m_isFloating && !candidate->m_isFloating)
+                continue;
+
             const auto candidatePos  = candidate->m_realPosition->value() + candidate->m_floatingOffset;
             const auto candidateSize = candidate->m_realSize->value();
 
@@ -457,10 +461,16 @@ CBox CHyprPill::visibleBoxGlobal() const {
     if (dodging)
         std::tie(resolvedCenter, resolvedWidth) = solveConstrained(resolvedWidth, dodging);
 
-    const int targetW = std::max<int>(1, std::lround(resolvedWidth));
+    int targetW = std::max<int>(1, std::lround(resolvedWidth));
     const int targetH = std::max<int>(1, std::lround(m_height));
-    const int targetX = std::clamp(static_cast<int>(std::lround(resolvedCenter - targetW / 2.F)), static_cast<int>(std::lround(windowLeft)),
-                                   static_cast<int>(std::lround(windowRight - targetW)));
+    int targetX = std::clamp(static_cast<int>(std::lround(resolvedCenter - targetW / 2.F)), static_cast<int>(std::lround(windowLeft)),
+                             static_cast<int>(std::lround(windowRight - targetW)));
+
+    // Keep a dodging pill steady while hovered so repeated clicks don't chase a moving target.
+    if (dodging && m_hovered && m_lastFrameDodging) {
+        targetX = m_lastFrameResolvedX;
+        targetW = m_lastFrameResolvedW;
+    }
 
     m_lastFrameDodging   = dodging;
     m_lastFrameResolvedX = targetX;
@@ -558,6 +568,14 @@ bool CHyprPill::inputIsValid(bool ignoreSeatGrab) {
 
     if (!ignoreSeatGrab && g_pSeatManager->m_seatGrab && !g_pSeatManager->m_seatGrab->accepts(m_pWindow->wlSurface()->resource()))
         return false;
+
+    if (!m_dragPending && !m_draggingThis) {
+        const auto WINDOWATCURSOR = g_pCompositor->vectorToWindowUnified(
+            g_pInputManager->getMouseCoordsInternal(), Desktop::View::RESERVED_EXTENTS | Desktop::View::INPUT_EXTENTS | Desktop::View::ALLOW_FLOATING);
+
+        if (WINDOWATCURSOR != m_pWindow.lock())
+            return false;
+    }
 
     return true;
 }
@@ -906,7 +924,7 @@ void CHyprPill::updateStateAndAnimate() {
 
     const bool focused = Desktop::focusState()->window() == m_pWindow.lock();
 
-    m_hovered = isHovering();
+    m_hovered = inputIsValid(true) && isHovering();
 
     if (m_dragPending || m_draggingThis)
         m_targetState = ePillVisualState::PRESSED;
