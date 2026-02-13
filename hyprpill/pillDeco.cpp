@@ -462,10 +462,11 @@ CBox CHyprPill::visibleBoxGlobal() const {
     int targetX = std::clamp(static_cast<int>(std::lround(resolvedCenter - targetW / 2.F)), static_cast<int>(std::lround(windowLeft)),
                                    static_cast<int>(std::lround(windowRight - targetW)));
 
-    // If the cursor is hovering over the pill, freeze the dodge position so the
-    // pill does not slide out from under the mouse (e.g. when clicking to focus).
+    // If the cursor is hovering over the pill, freeze the dodge X position so
+    // the pill does not slide out from under the mouse (e.g. when clicking to
+    // focus).  Only the X position is frozen; width and other animations
+    // (active/hover/inactive state transitions) continue to play normally.
     if (m_hovered && m_geometryAnimInitialized) {
-        targetW = std::max<int>(1, std::lround(m_geometryAnimW));
         targetX = std::clamp(static_cast<int>(std::lround(m_geometryAnimX)), static_cast<int>(std::lround(windowLeft)),
                              static_cast<int>(std::lround(windowRight - targetW)));
     }
@@ -620,6 +621,15 @@ void CHyprPill::endDrag(SCallbackInfo& info) {
                 Desktop::focusState()->fullWindowFocus(PWINDOW);
             g_pKeybindManager->m_dispatchers["settiled"](std::format("address:0x{:x}", (uintptr_t)PWINDOW.get()));
         }
+    }
+
+    // If still hovered after a drag that had locked geometry, restore the
+    // geometry animation X position so the hover-freeze keeps the pill in
+    // place instead of jumping to center on the next frame.
+    if (m_hovered && m_dragGeometryLocked) {
+        m_geometryAnimInitialized = true;
+        m_geometryAnimX           = static_cast<float>(m_dragLockedResolvedX);
+        m_geometryAnimLastTick    = Time::steadyNow();
     }
 
     m_dragPending        = false;
