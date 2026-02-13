@@ -433,8 +433,10 @@ CBox CHyprPill::visibleBoxGlobal() const {
                 }
             }
         } else {
-            // If no non-occluding placement exists, gracefully return to center.
-            dodging = false;
+            // All positions are blocked; the pill is fully occluded and needs
+            // a scoot to make room.  Keep dodging = true so that the scoot
+            // logic fires.
+            dodging = true;
             resolvedCenter = std::clamp(baseCenterX, domain.start, domain.end);
         }
 
@@ -469,7 +471,18 @@ CBox CHyprPill::visibleBoxGlobal() const {
         const bool needsScoot = dodging && m_targetState != ePillVisualState::INACTIVE && freeWidthAtCenter < configuredStateWidth;
         if (needsScoot) {
             const float deficit = configuredStateWidth - freeWidthAtCenter;
-            const int scootDir  = resolvedCenter < baseCenterX - 0.5F ? -1 : 1;
+            int scootDir = resolvedCenter < baseCenterX - 0.5F ? -1 : (resolvedCenter > baseCenterX + 0.5F ? 1 : 0);
+            // When the solver could not dodge (resolvedCenter stayed at
+            // baseCenterX), derive the scoot direction from the occluders:
+            // move the window away from the dominant occlusion side.
+            if (scootDir == 0 && !occluders.empty()) {
+                float occMass = 0.F;
+                for (const auto& occ : occluders)
+                    occMass += ((occ.start + occ.end) * 0.5F - baseCenterX) * (occ.end - occ.start);
+                scootDir = occMass > 0.F ? -1 : 1;
+            }
+            if (scootDir == 0)
+                scootDir = 1;
             m_scootTarget = scootDir * deficit;
         } else {
             m_scootTarget = 0.F;
