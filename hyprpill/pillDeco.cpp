@@ -562,15 +562,23 @@ bool CHyprPill::pointerInputTargetsOwner(const Vector2D& coords, bool hoverHitbo
     if (!owner)
         return false;
 
+    const auto hb = hoverHitbox ? hoverHitboxGlobal() : clickHitboxGlobal();
+    const bool inPillHitbox = VECINRECT(coords, hb.x, hb.y, hb.x + hb.w, hb.y + hb.h);
+    if (!inPillHitbox)
+        return false;
+
     const auto WINDOWATCURSOR = g_pCompositor->vectorToWindowUnified(coords, Desktop::View::RESERVED_EXTENTS | Desktop::View::INPUT_EXTENTS | Desktop::View::ALLOW_FLOATING);
 
-    // Prefer strict top-window matching when compositor can resolve one.
-    if (WINDOWATCURSOR)
-        return WINDOWATCURSOR == owner;
+    if (WINDOWATCURSOR == owner)
+        return true;
 
-    // Fallback path: allow pill-owned input regions in case the resolver does not include this deco geometry.
-    const auto hb = hoverHitbox ? hoverHitboxGlobal() : clickHitboxGlobal();
-    return VECINRECT(coords, hb.x, hb.y, hb.x + hb.w, hb.y + hb.h);
+    // If resolver misses decoration-only geometry, allow direct hitbox interaction.
+    if (!WINDOWATCURSOR)
+        return true;
+
+    // If another window is reported under cursor, still allow interaction for the focused owner.
+    // This covers pills positioned above window content where window-picking may hit a lower tile.
+    return Desktop::focusState()->window() == owner;
 }
 
 bool CHyprPill::inputIsValid(bool ignoreSeatGrab) {
