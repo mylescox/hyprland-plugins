@@ -296,10 +296,11 @@ CBox CHyprPill::visibleBoxGlobal() const {
     std::vector<SHorizontalInterval> occluders;
     occluders.reserve(g_pCompositor->m_windows.size());
 
+    const auto ownerIt = std::find(g_pCompositor->m_windows.begin(), g_pCompositor->m_windows.end(), owner);
+    const auto ownerZ  = ownerIt == g_pCompositor->m_windows.end() ? 0ULL : static_cast<size_t>(std::distance(g_pCompositor->m_windows.begin(), ownerIt));
+
     const bool canDetectOccluders = owner->m_workspace && owner->m_workspace->isVisible();
     if (canDetectOccluders) {
-        const auto ownerIt = std::find(g_pCompositor->m_windows.begin(), g_pCompositor->m_windows.end(), owner);
-        const auto ownerZ  = ownerIt == g_pCompositor->m_windows.end() ? 0ULL : static_cast<size_t>(std::distance(g_pCompositor->m_windows.begin(), ownerIt));
 
         const float hoverHeightPad = std::max<Hyprlang::INT>(0, **PHITH);
         const float hoverOffsetY   = **POFFY;
@@ -350,6 +351,47 @@ CBox CHyprPill::visibleBoxGlobal() const {
 
             // Only dodge windows that are stacked above the owner.
             if (candidateZ <= ownerZ)
+                continue;
+
+            occluders.push_back({clippedLeft, clippedRight});
+        }
+
+        for (auto& weakPill : g_pGlobalState->pills) {
+            const auto otherPill = weakPill.lock();
+            if (!otherPill || otherPill.get() == this || !otherPill->m_hasLastRenderBox || otherPill->m_hidden)
+                continue;
+
+            const auto otherOwner = otherPill->m_pWindow.lock();
+            if (!otherOwner || otherOwner->isHidden() || !otherOwner->m_isMapped)
+                continue;
+
+            if (!otherOwner->m_workspace || !otherOwner->m_workspace->isVisible())
+                continue;
+
+            if (otherOwner->m_monitor != owner->m_monitor)
+                continue;
+
+            const auto otherIt = std::find(g_pCompositor->m_windows.begin(), g_pCompositor->m_windows.end(), otherOwner);
+            const auto otherZ  = otherIt == g_pCompositor->m_windows.end() ? 0ULL : static_cast<size_t>(std::distance(g_pCompositor->m_windows.begin(), otherIt));
+
+            // Prevent mutual dodge races by only yielding to pills on higher z windows.
+            if (otherZ <= ownerZ)
+                continue;
+
+            const auto& otherBox = otherPill->m_lastRenderBox;
+            const float otherLeft   = static_cast<float>(otherBox.x);
+            const float otherTop    = static_cast<float>(otherBox.y);
+            const float otherRight  = otherLeft + otherBox.w;
+            const float otherBottom = otherTop + otherBox.h;
+
+            const bool overlapsOcclusionX = otherRight > occlusionLeft && otherLeft < occlusionRight;
+            const bool overlapsOcclusionY = otherBottom > occlusionTop && otherTop < occlusionBottom;
+            if (!overlapsOcclusionX || !overlapsOcclusionY)
+                continue;
+
+            const float clippedLeft  = std::max(windowLeft, otherLeft - occluderMargin);
+            const float clippedRight = std::min(windowRight, otherRight + occluderMargin);
+            if (clippedRight <= clippedLeft)
                 continue;
 
             occluders.push_back({clippedLeft, clippedRight});
