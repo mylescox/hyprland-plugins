@@ -40,6 +40,3 @@ result-man
 
 build/
 .cache/
-
-# CodeQL
-_codeql_detected_source_root
