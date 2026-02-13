@@ -593,6 +593,14 @@ bool CHyprPill::inputIsValid(bool ignoreSeatGrab) {
     if (!ignoreSeatGrab && g_pSeatManager->m_seatGrab && !g_pSeatManager->m_seatGrab->accepts(m_pWindow->wlSurface()->resource()))
         return false;
 
+    if (!m_dragPending && !m_draggingThis) {
+        const auto WINDOWATCURSOR = g_pCompositor->vectorToWindowUnified(
+            g_pInputManager->getMouseCoordsInternal(), Desktop::View::RESERVED_EXTENTS | Desktop::View::INPUT_EXTENTS | Desktop::View::ALLOW_FLOATING);
+
+        if (WINDOWATCURSOR != m_pWindow.lock())
+            return false;
+    }
+
     return true;
 }
 
