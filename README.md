@@ -1,105 +1,33 @@
-# hyprland-plugins
+# Hyprpill
 
-This repo houses official plugins for Hyprland.
+This repo was forked from hyperland-plugins, but the main purpose for this repo is for development of Hyprpill, a grabbable title bar alternative for Hyprland windows (dwindle). Hyprbars is included because I needed an easy example to refer to while developing my own plugin.
 
-# Plugin list
- - hyprbars -> adds title bars to windows
- - hyprpill -> adds animated pill grabbers to windows
+<img width="1630" height="1307" alt="image" src="https://github.com/user-attachments/assets/e2096614-7a6b-4548-b5b4-55022703192f" />
 
-# Install
-> [!IMPORTANT]
-> hyprland-plugins only officially supports installation via `hyprpm`.
-> `hyprpm` automatically detects your hyprland version & installs only
-> the corresponding "pinned" release of hyprland-plugins.
-> If you want the latest commits to hyprland-plugins, you need to use
-> `hyprland-git`.
+# Features
+ - A grabbable pill indicator that elegantly floats above Hyprland windows. Click and drag on the pill to move a window.
+ - Pill width, radius, height, color, and opacity can be animated based on active window focus state and mouse hover state.
+ - Pills intelligently dodge occluding windows.
+ - Double-click pill to toggle floating. Middle-click to kill the window. When the window is tiled, right-click the pill to toggle pseudotile mode.
+ - Robust configuration options (see /hyprpill/README.md)
 
 ## Install with `hyprpm`
 
-To install these plugins, from the command line run:
+To install hyprpill, from the command line run:
 ```bash
 hyprpm update
 ```
 Then add this repository:
 ```bash
-hyprpm add https://github.com/hyprwm/hyprland-plugins
+hyprpm add https://github.com/mylescox/hyprland-plugins
 ```
-then enable the desired plugin with
+then enable hyprpill with
 ```bash
-hyprpm enable <plugin-name>
+hyprpm enable hyprpill
 ```
-
-See the respective README's in the subdirectories for configuration options.
 
 See [the plugins wiki](https://wiki.hyprland.org/Plugins/Using-Plugins/#installing--using-plugins) and `hyprpm -h` for more details.
-
-## Install on Nix
-
-To use these plugins, it's recommended that you are already using the
-[Hyprland flake](https://github.com/hyprwm/Hyprland).
-First, add this flake to your inputs:
-
-```nix
-inputs = {
-  # ...
-  hyprland.url = "github:hyprwm/Hyprland";
-  hyprland-plugins = {
-    url = "github:hyprwm/hyprland-plugins";
-    inputs.hyprland.follows = "hyprland";
-  };
-
-  # ...
-};
-```
-
-The `inputs.hyprland.follows` guarantees the plugins will always be built using
-your locked Hyprland version, thus you will never get version mismatches that
-lead to errors.
-
-After that's done, you can use the plugins with the Home Manager module like
-this:
-
-```nix
-{inputs, pkgs, ...}: {
-  wayland.windowManager.hyprland = {
-    enable = true;
-    # ...
-    plugins = [
-      inputs.hyprland-plugins.packages.${pkgs.system}.hyprbars
-      # ...
-    ];
-  };
-}
-```
-
-If you don't use Home Manager:
-
-```nix
-{ lib, pkgs, inputs, ... }:
-with lib; let
-  hyprPluginPkgs = inputs.hyprland-plugins.packages.${pkgs.system};
-  hypr-plugin-dir = pkgs.symlinkJoin {
-    name = "hyrpland-plugins";
-    paths = with hyprPluginPkgs; [
-      hyprbars
-      hyprpill
-    ];
-  };
-in
-{
-  environment.sessionVariables = { HYPR_PLUGIN_DIR = hypr-plugin-dir; };
-}
-```
-
-And in `hyprland.conf`
-
-```hyprlang
-# load all the plugins you installed
-exec-once = hyprctl plugin load "$HYPR_PLUGIN_DIR/lib/libhyprbars.so"
-```
 
 # Contributing
 
 Feel free to open issues and MRs with fixes.
-
-If you want your plugin added here, contact vaxry beforehand.
