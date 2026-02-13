@@ -512,7 +512,11 @@ CBox CHyprPill::visibleBoxGlobal() const {
             m_lastFramePinnedEdge = 0;
     }
 
-    m_lastFrameDodging   = dodging;
+    // If hover-freeze is keeping the pill at a dodged position (non-zero
+    // dodge direction), preserve m_lastFrameDodging so that a subsequent
+    // beginDrag() correctly locks the geometry instead of letting the pill
+    // teleport to center when clicked again.
+    m_lastFrameDodging   = (m_hovered && m_geometryAnimInitialized && m_lastFrameDodgeDir != 0) ? true : dodging;
     m_lastFrameResolvedX = targetX;
     m_lastFrameResolvedW = targetW;
 
@@ -673,11 +677,30 @@ void CHyprPill::endDrag(SCallbackInfo& info) {
     // jumping to center on the next frame.
     if (m_hovered && m_dragGeometryLocked) {
         m_geometryAnimInitialized = true;
-        m_geometryAnimX           = static_cast<float>(m_dragLockedResolvedX);
+        // Use the relative offset from the window's current position rather
+        // than the stale absolute position captured at drag start, so that
+        // window movement during the drag does not cause the pill to teleport
+        // in the opposite direction upon release.
+        const auto PWINDOW = m_pWindow.lock();
+        if (PWINDOW) {
+            const auto PWORKSPACE      = PWINDOW->m_workspace;
+            const auto WORKSPACEOFFSET = PWORKSPACE && !PWINDOW->m_pinned ? PWORKSPACE->m_renderOffset->value() : Vector2D();
+            const float windowLeft = static_cast<float>(PWINDOW->m_realPosition->value().x + PWINDOW->m_floatingOffset.x + WORKSPACEOFFSET.x);
+            m_geometryAnimX = windowLeft + static_cast<float>(m_dragLockedOffsetX);
+        } else {
+            m_geometryAnimX = static_cast<float>(m_dragLockedResolvedX);
+        }
         m_geometryAnimLastTick    = Time::steadyNow();
         m_lastFrameDodgeOffset    = m_dragLockedDodgeOffset;
         m_lastFrameDodgeDir       = m_dragLockedDodgeDir;
-        m_lastFramePinnedEdge     = m_dragLockedPinnedEdge;
+        // Recompute the pinned edge from the updated animation position so it
+        // is consistent with the window's current location after a move.
+        if (m_dragLockedDodgeDir < 0)
+            m_lastFramePinnedEdge = static_cast<int>(std::lround(m_geometryAnimX)) + m_dragLockedResolvedW;
+        else if (m_dragLockedDodgeDir > 0)
+            m_lastFramePinnedEdge = static_cast<int>(std::lround(m_geometryAnimX));
+        else
+            m_lastFramePinnedEdge = m_dragLockedPinnedEdge;
     }
 
     m_dragPending        = false;
