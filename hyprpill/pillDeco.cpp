@@ -457,10 +457,16 @@ CBox CHyprPill::visibleBoxGlobal() const {
     if (dodging)
         std::tie(resolvedCenter, resolvedWidth) = solveConstrained(resolvedWidth, dodging);
 
-    const int targetW = std::max<int>(1, std::lround(resolvedWidth));
+    int targetW = std::max<int>(1, std::lround(resolvedWidth));
     const int targetH = std::max<int>(1, std::lround(m_height));
-    const int targetX = std::clamp(static_cast<int>(std::lround(resolvedCenter - targetW / 2.F)), static_cast<int>(std::lround(windowLeft)),
-                                   static_cast<int>(std::lround(windowRight - targetW)));
+    int targetX = std::clamp(static_cast<int>(std::lround(resolvedCenter - targetW / 2.F)), static_cast<int>(std::lround(windowLeft)),
+                             static_cast<int>(std::lround(windowRight - targetW)));
+
+    // Keep a dodging pill steady while hovered so repeated clicks don't chase a moving target.
+    if (dodging && m_hovered && m_lastFrameDodging) {
+        targetX = m_lastFrameResolvedX;
+        targetW = m_lastFrameResolvedW;
+    }
 
     m_lastFrameDodging   = dodging;
     m_lastFrameResolvedX = targetX;
