@@ -61,6 +61,7 @@ class CHyprPill : public IHyprWindowDecoration {
     void                      updateDragPosition(const Vector2D& coordsGlobal);
     void                      updateCursorShape(const std::optional<Vector2D>& coords = std::nullopt);
     bool                      inputIsValid(bool ignoreSeatGrab = false);
+    bool                      pointerInputTargetsOwner(const Vector2D& coords, bool hoverHitbox) const;
     Vector2D                  cursorRelativeToPill() const;
     bool                      isHovering() const;
 
