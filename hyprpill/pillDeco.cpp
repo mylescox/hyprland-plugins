@@ -111,6 +111,8 @@ CHyprPill::CHyprPill(PHLWINDOW pWindow) : IHyprWindowDecoration(pWindow), m_pWin
 }
 
 CHyprPill::~CHyprPill() {
+    removeScoot();
+
     if (g_pGlobalState && g_pGlobalState->dragPill.get() == this)
         g_pGlobalState->dragPill.reset();
 
@@ -166,10 +168,13 @@ void CHyprPill::draw(PHLMONITOR pMonitor, const float& a) {
         return;
 
     static auto* const PENABLED = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:enabled")->getDataStaticPtr();
-    if (!**PENABLED || m_hidden)
+    if (!**PENABLED || m_hidden) {
+        removeScoot();
         return;
+    }
 
     updateStateAndAnimate();
+    updateScoot();
 
     CPillPassElement::SPillData data;
     data.deco = this;
@@ -280,6 +285,12 @@ CBox CHyprPill::visibleBoxGlobal() const {
     const float windowWidth  = std::max(1.F, static_cast<float>(owner->m_realSize->value().x));
     const float windowRight  = windowLeft + windowWidth;
     const float centerX = windowLeft + (windowRight - windowLeft) * 0.5F;
+    // Base (un-scooted) position for occlusion computation to avoid a
+    // feedback loop: the scoot moves the window, which changes free space,
+    // which would flip the scoot target back to zero.
+    const float baseWindowLeft  = windowLeft - m_scootApplied;
+    const float baseWindowRight = baseWindowLeft + windowWidth;
+    const float baseCenterX     = baseWindowLeft + windowWidth * 0.5F;
     const auto desiredWidth = std::max<int>(1, std::lround(m_width > 1.F ? m_width : **PWIDTH));
     box.w = std::min<int>(desiredWidth, std::max<int>(1, static_cast<int>(std::lround(windowRight - windowLeft))));
     box.h              = std::max<int>(1, std::lround(m_height));
@@ -307,8 +318,8 @@ CBox CHyprPill::visibleBoxGlobal() const {
 
         const float ownerTop         = static_cast<float>(box.y);
         const float basePillY        = std::lround(ownerTop - box.h - m_offsetY);
-        const float occlusionLeft    = windowLeft;
-        const float occlusionRight   = windowRight;
+        const float occlusionLeft    = baseWindowLeft;
+        const float occlusionRight   = baseWindowRight;
         const float occlusionTop     = std::lround(basePillY - hoverHeightPad + hoverOffsetY);
         const float occlusionBottom  = occlusionTop + box.h + hoverHeightPad * 2.F;
 
@@ -340,8 +351,8 @@ CBox CHyprPill::visibleBoxGlobal() const {
             if (!overlapsOwnerTopEdge)
                 continue;
 
-            const float clippedLeft  = std::max(windowLeft, candidateLeft - occluderMargin);
-            const float clippedRight = std::min(windowRight, candidateRight + occluderMargin);
+            const float clippedLeft  = std::max(baseWindowLeft, candidateLeft - occluderMargin);
+            const float clippedRight = std::min(baseWindowRight, candidateRight + occluderMargin);
             if (clippedRight <= clippedLeft)
                 continue;
 
@@ -358,7 +369,7 @@ CBox CHyprPill::visibleBoxGlobal() const {
 
     auto solveConstrained = [&](float width, bool& dodging) {
         const float halfW = std::max(0.5F, width / 2.F);
-        SHorizontalInterval domain{windowLeft + halfW, windowRight - halfW};
+        SHorizontalInterval domain{baseWindowLeft + halfW, baseWindowRight - halfW};
         domain.end = std::max(domain.end, domain.start);
 
         std::vector<SHorizontalInterval> forbidden;
@@ -369,12 +380,12 @@ CBox CHyprPill::visibleBoxGlobal() const {
             forbidden.push_back({occ.start - avoidDistance, occ.end + avoidDistance});
 
         const auto allowed = subtractForbiddenIntervals(domain, forbidden);
-        const bool centerAllowed = std::ranges::any_of(allowed, [&](const auto& interval) { return centerX >= interval.start && centerX <= interval.end; });
+        const bool centerAllowed = std::ranges::any_of(allowed, [&](const auto& interval) { return baseCenterX >= interval.start && baseCenterX <= interval.end; });
 
-        float resolvedCenter = std::clamp(centerX, domain.start, domain.end);
+        float resolvedCenter = std::clamp(baseCenterX, domain.start, domain.end);
         if (!allowed.empty()) {
             if (centerAllowed) {
-                resolvedCenter = std::clamp(centerX, domain.start, domain.end);
+                resolvedCenter = std::clamp(baseCenterX, domain.start, domain.end);
                 dodging = false;
             } else {
                 dodging = true;
@@ -385,12 +396,12 @@ CBox CHyprPill::visibleBoxGlobal() const {
                 SHorizontalInterval bestRight;
 
                 for (const auto& interval : allowed) {
-                    if (interval.end <= centerX) {
+                    if (interval.end <= baseCenterX) {
                         if (!foundLeftOfCenter || interval.end > bestLeft.end) {
                             bestLeft = interval;
                             foundLeftOfCenter = true;
                         }
-                    } else if (interval.start >= centerX) {
+                    } else if (interval.start >= baseCenterX) {
                         if (!foundRightOfCenter || interval.start < bestRight.start) {
                             bestRight = interval;
                             foundRightOfCenter = true;
@@ -414,21 +425,21 @@ CBox CHyprPill::visibleBoxGlobal() const {
                     resolvedCenter = bestRight.start;
                 } else {
                     const auto& nearest = *std::min_element(allowed.begin(), allowed.end(), [&](const auto& a, const auto& b) {
-                        const float da = std::min(std::abs(centerX - a.start), std::abs(centerX - a.end));
-                        const float db = std::min(std::abs(centerX - b.start), std::abs(centerX - b.end));
+                        const float da = std::min(std::abs(baseCenterX - a.start), std::abs(baseCenterX - a.end));
+                        const float db = std::min(std::abs(baseCenterX - b.start), std::abs(baseCenterX - b.end));
                         return da < db;
                     });
-                    resolvedCenter = std::clamp(centerX, nearest.start, nearest.end);
+                    resolvedCenter = std::clamp(baseCenterX, nearest.start, nearest.end);
                 }
             }
         } else {
             // If no non-occluding placement exists, gracefully return to center.
             dodging = false;
-            resolvedCenter = std::clamp(centerX, domain.start, domain.end);
+            resolvedCenter = std::clamp(baseCenterX, domain.start, domain.end);
         }
 
-        float leftLimit  = windowLeft;
-        float rightLimit = windowRight;
+        float leftLimit  = baseWindowLeft;
+        float rightLimit = baseWindowRight;
         for (const auto& occ : occluders) {
             if (resolvedCenter <= occ.start)
                 rightLimit = std::min(rightLimit, occ.start - std::max<Hyprlang::INT>(0, **PHITW));
@@ -451,11 +462,29 @@ CBox CHyprPill::visibleBoxGlobal() const {
     auto [resolvedCenter, resolvedWidth] = solveConstrained(std::max(1.F, configuredStateWidth), dodging);
 
     const float freeWidthAtCenter = resolvedWidth;
+
+    // Determine whether a scoot is needed: the pill is dodging and the
+    // target state requires more width than the un-occluded space provides.
+    {
+        const bool needsScoot = dodging && m_targetState != ePillVisualState::INACTIVE && freeWidthAtCenter < configuredStateWidth;
+        if (needsScoot) {
+            const float deficit = configuredStateWidth - freeWidthAtCenter;
+            const int scootDir  = resolvedCenter < baseCenterX - 0.5F ? -1 : 1;
+            m_scootTarget = scootDir * deficit;
+        } else {
+            m_scootTarget = 0.F;
+        }
+    }
+
     const float animatedWidth = std::max(1.F, static_cast<float>(box.w));
     resolvedWidth = std::min({animatedWidth, std::max(1.F, configuredStateWidth), freeWidthAtCenter});
 
     if (dodging)
         std::tie(resolvedCenter, resolvedWidth) = solveConstrained(resolvedWidth, dodging);
+
+    // solveConstrained works in base (un-scooted) coordinates; translate the
+    // resolved center to actual (scooted) coordinates for pill placement.
+    resolvedCenter += m_scootApplied;
 
     int targetW = std::max<int>(1, std::lround(resolvedWidth));
     const int targetH = std::max<int>(1, std::lround(m_height));
@@ -1054,6 +1083,56 @@ void CHyprPill::updateStateAndAnimate() {
         damageEntire();
 
     m_lastFrame = now;
+}
+
+void CHyprPill::removeScoot() {
+    if (std::abs(m_scootApplied) < 0.001F)
+        return;
+
+    const auto PWINDOW = m_pWindow.lock();
+    if (PWINDOW)
+        PWINDOW->m_floatingOffset.x -= m_scootApplied;
+
+    m_scootApplied = 0.F;
+    m_scootOffset  = 0.F;
+    m_scootTarget  = 0.F;
+}
+
+void CHyprPill::updateScoot() {
+    static auto* const PGEOMLERPSPEED  = (Hyprlang::FLOAT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:geometry_lerp_speed")->getDataStaticPtr();
+    static auto* const PGEOMLERPEASING = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:geometry_lerp_easing")->getDataStaticPtr();
+
+    const auto PWINDOW = m_pWindow.lock();
+    if (!PWINDOW) {
+        m_scootTarget  = 0.F;
+        m_scootOffset  = 0.F;
+        m_scootApplied = 0.F;
+        return;
+    }
+
+    // Animate m_scootOffset toward m_scootTarget (set by visibleBoxGlobal).
+    const float lerpSpeed = std::max(0.01F, **PGEOMLERPSPEED);
+    const auto  now       = Time::steadyNow();
+    const float dtMs      = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_scootAnimLastTick).count();
+    m_scootAnimLastTick   = now;
+    const float dtSeconds = std::max(0.F, dtMs) / 1000.F;
+    const float t         = std::clamp(dtSeconds * lerpSpeed, 0.F, 1.F);
+    const float easedT    = applyNamedEasing(t, std::string{*PGEOMLERPEASING});
+    m_scootOffset = lerpf(m_scootOffset, m_scootTarget, easedT);
+    if (std::abs(m_scootOffset - m_scootTarget) < 0.5F)
+        m_scootOffset = m_scootTarget;
+
+    // Apply the delta between the desired scoot and what is already applied.
+    const float delta = m_scootOffset - m_scootApplied;
+    if (std::abs(delta) > 0.001F) {
+        PWINDOW->m_floatingOffset.x += delta;
+        // Shift the geometry animation position by the same delta so the
+        // pill stays locked to the window rather than lagging behind.
+        if (m_geometryAnimInitialized)
+            m_geometryAnimX += delta;
+        m_scootApplied = m_scootOffset;
+        damageEntire();
+    }
 }
 
 void CHyprPill::updateRules() {
