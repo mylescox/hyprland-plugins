@@ -358,7 +358,7 @@ CBox CHyprPill::visibleBoxGlobal() const {
 
         for (auto& weakPill : g_pGlobalState->pills) {
             const auto otherPill = weakPill.lock();
-            if (!otherPill || otherPill.get() == this || !otherPill->m_hasLastRenderBox || otherPill->m_hidden)
+            if (!otherPill || otherPill.get() == this || otherPill->m_hidden)
                 continue;
 
             const auto otherOwner = otherPill->m_pWindow.lock();
@@ -378,7 +378,8 @@ CBox CHyprPill::visibleBoxGlobal() const {
             if (otherZ <= ownerZ)
                 continue;
 
-            const auto& otherBox = otherPill->m_lastRenderBox;
+            // Prefer authoritative geometry from the other pill, even before first render.
+            const auto otherBox = otherPill->visibleBoxGlobal();
             const float otherLeft   = static_cast<float>(otherBox.x);
             const float otherTop    = static_cast<float>(otherBox.y);
             const float otherRight  = otherLeft + otherBox.w;
