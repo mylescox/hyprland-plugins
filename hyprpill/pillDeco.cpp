@@ -465,10 +465,13 @@ CBox CHyprPill::visibleBoxGlobal() const {
 
     const float freeWidthAtCenter = resolvedWidth;
 
-    // Determine whether a scoot is needed: the pill is dodging and the
-    // target state requires more width than the un-occluded space provides.
+    // Determine whether a scoot is needed: occluders prevent the pill from
+    // reaching its target width and the pill is not inactive.  Only scoot
+    // when the window itself is wide enough for the pill – otherwise the
+    // width limitation comes from the window, not the occluders.
     {
-        const bool needsScoot = dodging && m_targetState != ePillVisualState::INACTIVE && freeWidthAtCenter < configuredStateWidth;
+        const bool needsScoot = !occluders.empty() && m_targetState != ePillVisualState::INACTIVE && freeWidthAtCenter < configuredStateWidth &&
+            windowWidth >= configuredStateWidth;
         if (needsScoot) {
             const float deficit = configuredStateWidth - freeWidthAtCenter;
             int scootDir = resolvedCenter < baseCenterX - 0.5F ? -1 : (resolvedCenter > baseCenterX + 0.5F ? 1 : 0);
@@ -476,16 +479,25 @@ CBox CHyprPill::visibleBoxGlobal() const {
             // baseCenterX), derive the scoot direction from the occluders:
             // move the window away from the dominant occlusion side.
             if (scootDir == 0 && !occluders.empty()) {
-                float occMass = 0.F;
-                for (const auto& occ : occluders)
-                    occMass += ((occ.start + occ.end) * 0.5F - baseCenterX) * (occ.end - occ.start);
-                scootDir = occMass > 0.F ? -1 : 1;
+                // If a scoot direction was already chosen, keep it to prevent
+                // oscillation from near-symmetric occluder layouts where
+                // floating-point rounding could flip the sign each frame.
+                if (m_scootDir != 0) {
+                    scootDir = m_scootDir;
+                } else {
+                    float occMass = 0.F;
+                    for (const auto& occ : occluders)
+                        occMass += ((occ.start + occ.end) * 0.5F - baseCenterX) * (occ.end - occ.start);
+                    scootDir = occMass > 0.F ? -1 : 1;
+                }
             }
             if (scootDir == 0)
                 scootDir = 1;
+            m_scootDir    = scootDir;
             m_scootTarget = scootDir * deficit;
         } else {
             m_scootTarget = 0.F;
+            m_scootDir    = 0;
         }
     }
 
@@ -617,6 +629,22 @@ CBox CHyprPill::hoverHitboxGlobal() const {
     box.w += **PHITW * 2;
     box.h += **PHITH * 2;
     box.y = std::lround(box.y - **PHITH + **POFFY);
+
+    // When the window is scooted, extend the hover hitbox to also cover the
+    // un-scooted pill position.  Without this the scoot moves the hitbox out
+    // from under the cursor, un-hovering the pill, which removes the scoot,
+    // which brings the hitbox back – causing a per-frame oscillation.
+    if (std::abs(m_scootApplied) > 0.001F) {
+        const int scootPx = static_cast<int>(std::lround(m_scootApplied));
+        if (scootPx > 0) {
+            // Window moved right; extend left to cover original position.
+            box.x -= scootPx;
+            box.w += scootPx;
+        } else {
+            // Window moved left; extend right to cover original position.
+            box.w -= scootPx;  // scootPx is negative, so this adds
+        }
+    }
     return box;
 }
 
@@ -1114,6 +1142,7 @@ void CHyprPill::removeScoot() {
     m_scootApplied = 0.F;
     m_scootOffset  = 0.F;
     m_scootTarget  = 0.F;
+    m_scootDir     = 0;
 }
 
 void CHyprPill::updateScoot() {
@@ -1123,6 +1152,7 @@ void CHyprPill::updateScoot() {
     const auto PWINDOW = m_pWindow.lock();
     if (!PWINDOW) {
         m_scootTarget  = 0.F;
+        m_scootDir     = 0;
         m_scootOffset  = 0.F;
         m_scootApplied = 0.F;
         return;
