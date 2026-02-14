@@ -19,3 +19,12 @@ output = "hyprpill/hyprpill.so"
 build = [
     "make -C hyprpill all",
 ]
+
+
+[liquiddock]
+description = "A dock plugin with gooey SDF rendering and physics-based animations"
+authors = ["mylescox"]
+output = "liquiddock/liquiddock.so"
+build = [
+    "make -C liquiddock all",
+]

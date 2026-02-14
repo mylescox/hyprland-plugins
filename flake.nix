@@ -31,6 +31,7 @@
         (pkgsFor.${system}.hyprlandPlugins)
         hyprbars
         hyprpill
+        liquiddock
         ;
     });
 
@@ -46,6 +47,7 @@
           // {
             hyprbars = callPackage ./hyprbars {};
             hyprpill = callPackage ./hyprpill {};
+            liquiddock = callPackage ./liquiddock {};
           };
       };
     };

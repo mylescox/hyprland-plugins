@@ -1,6 +1,6 @@
 # Hyprpill
 
-This repo was forked from hyperland-plugins, but the main purpose for this repo is for development of Hyprpill, a grabbable title bar alternative for Hyprland windows (dwindle). Hyprbars is included because I needed an easy example to refer to while developing my own plugin.
+This repo was forked from hyperland-plugins, but the main purpose for this repo is for development of Hyprpill, a grabbable title bar alternative for Hyprland windows (dwindle). Hyprbars and LiquidDock are also included.
 
 <img width="1630" height="1307" alt="image" src="https://github.com/user-attachments/assets/e2096614-7a6b-4548-b5b4-55022703192f" />
 
@@ -10,6 +10,9 @@ This repo was forked from hyperland-plugins, but the main purpose for this repo 
  - Pills intelligently dodge occluding windows.
  - Double-click pill to toggle floating. Middle-click to kill the window. When the window is tiled, right-click the pill to toggle pseudotile mode.
  - Robust configuration options (see /hyprpill/README.md)
+
+# LiquidDock
+ - A dock plugin with gooey SDF rendering and physics-based animations (see /liquiddock/README.md)
 
 ## Install with `hyprpm`
 
