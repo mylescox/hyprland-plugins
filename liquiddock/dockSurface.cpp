@@ -98,6 +98,7 @@ CLiquidDock::CLiquidDock() {
     initShader();
     rebuildDockItems();
     layoutIcons();
+    damageEntire();
 }
 
 CLiquidDock::~CLiquidDock() {
