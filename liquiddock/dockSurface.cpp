@@ -28,12 +28,20 @@ out vec4 fragColor;
 
 #define MAX_ICONS 32
 
+// Icon shapes — their gooey-merged SDF forms the dock surface
 uniform vec2  u_iconPositions[MAX_ICONS];
 uniform vec2  u_iconSizes[MAX_ICONS];
 uniform float u_iconRoundings[MAX_ICONS];
-uniform float u_iconAlphas[MAX_ICONS];
 uniform int   u_numIcons;
 uniform float u_threshold;
+
+// Running indicator dots
+uniform vec2  u_dotPositions[MAX_ICONS];
+uniform float u_dotRadii[MAX_ICONS];
+uniform int   u_numDots;
+uniform vec4  u_dotColor;
+
+// Common
 uniform vec4  u_dockColor;
 uniform vec2  u_resolution;
 
@@ -43,28 +51,53 @@ float roundRectSDF(vec2 p, vec2 size, float r) {
     return min(max(d.x, d.y), 0.0) + length(max(d, 0.0)) - r;
 }
 
+float circleSDF(vec2 p, float r) {
+    return length(p) - r;
+}
+
 void main() {
     vec2 fragPos = v_texcoord * u_resolution;
-    float combinedSDF = 1e20;
 
-    for (int i = 0; i < u_numIcons; ++i) {
-        if (i >= MAX_ICONS)
-            break;
+    // --- Dock surface: gooey-merged icon blobs ---
+    float dockAlpha = 0.0;
+    if (u_numIcons > 0) {
+        float combinedSDF = 1e20;
+        for (int i = 0; i < u_numIcons; ++i) {
+            if (i >= MAX_ICONS)
+                break;
+            vec2 p = fragPos - u_iconPositions[i];
+            float currentSDF = roundRectSDF(p, u_iconSizes[i], u_iconRoundings[i]);
 
-        vec2 p = fragPos - u_iconPositions[i];
-        float currentSDF = roundRectSDF(p, u_iconSizes[i], u_iconRoundings[i]);
-
-        // Smooth minimum for gooey blobbing
-        float k = u_threshold;
-        float h = clamp(0.5 + 0.5 * (currentSDF - combinedSDF) / k, 0.0, 1.0);
-        combinedSDF = mix(currentSDF, combinedSDF, h) - k * h * (1.0 - h);
+            // Smooth minimum for gooey blobbing
+            float k = u_threshold;
+            float h = clamp(0.5 + 0.5 * (currentSDF - combinedSDF) / k, 0.0, 1.0);
+            combinedSDF = mix(currentSDF, combinedSDF, h) - k * h * (1.0 - h);
+        }
+        dockAlpha = smoothstep(1.0, -1.0, combinedSDF);
     }
 
-    float alpha = smoothstep(1.0, -1.0, combinedSDF);
+    // --- Running indicator dots ---
+    float dotAlpha = 0.0;
+    for (int i = 0; i < u_numDots; ++i) {
+        if (i >= MAX_ICONS)
+            break;
+        float d = circleSDF(fragPos - u_dotPositions[i], u_dotRadii[i]);
+        dotAlpha = max(dotAlpha, smoothstep(1.0, -1.0, d));
+    }
 
-    if (alpha > 0.001) {
-        fragColor = u_dockColor;
-        fragColor.a *= alpha;
+    // Composite: dock surface, then dots on top
+    vec4 color = u_dockColor;
+    color.a *= dockAlpha;
+
+    if (dotAlpha > 0.001) {
+        vec4 dot = u_dotColor;
+        dot.a *= dotAlpha;
+        color.rgb = mix(color.rgb, dot.rgb, dot.a);
+        color.a = max(color.a, dot.a);
+    }
+
+    if (color.a > 0.001) {
+        fragColor = color;
     } else {
         discard;
     }
@@ -77,11 +110,19 @@ precision highp float;
 layout(location = 0) in vec2 a_position;
 layout(location = 1) in vec2 a_texcoord;
 
+uniform vec2 u_topLeft;
+uniform vec2 u_fullSize;
+uniform vec2 u_monitorSize;
+
 out vec2 v_texcoord;
 
 void main() {
     v_texcoord = a_texcoord;
-    gl_Position = vec4(a_position, 0.0, 1.0);
+    // Map quad from (0,0)-(1,1) to monitor NDC coordinates
+    vec2 pos = u_topLeft + a_position * u_fullSize;
+    vec2 ndc = (pos / u_monitorSize) * 2.0 - 1.0;
+    ndc.y = -ndc.y; // flip Y for GL
+    gl_Position = vec4(ndc, 0.0, 1.0);
 }
 )glsl";
 
@@ -440,29 +481,160 @@ void CLiquidDock::damageEntire() {
     if (box.empty())
         return;
 
-    g_pHyprRenderer->damageBox(box);
+    // Expand to cover indicator dots below the dock
+    g_pHyprRenderer->damageBox(box.expand(8));
 }
 
-void CLiquidDock::renderDockBackground(PHLMONITOR monitor, float alpha) {
-    static auto* const PCOLOR   = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:liquiddock:dock_color")->getDataStaticPtr();
-    static auto* const PRADIUS  = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:liquiddock:dock_radius")->getDataStaticPtr();
+void CLiquidDock::renderDockSDF(PHLMONITOR monitor, float alpha) {
+    static auto* const PCOLOR          = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:liquiddock:dock_color")->getDataStaticPtr();
+    static auto* const PICONSIZE       = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:liquiddock:icon_size")->getDataStaticPtr();
+    static auto* const PTHRESHOLD      = (Hyprlang::FLOAT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:liquiddock:gooey_threshold")->getDataStaticPtr();
+    static auto* const PINDICATORCOLOR = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:liquiddock:indicator_color")->getDataStaticPtr();
 
-    const CBox box = dockBoxGlobal().translate(-monitor->m_position);
-    if (box.empty())
+    if (!m_shaderProgram)
         return;
 
-    CHyprColor dockColor = **PCOLOR;
-    dockColor.a *= alpha;
+    const int numIcons = std::min((int)g_pGlobalState->items.size(), 32);
+    if (numIcons == 0)
+        return;
 
-    g_pHyprOpenGL->renderRect(box, dockColor, {.round = **PRADIUS});
+    const CBox globalBox = dockBoxGlobal();
+    if (globalBox.empty())
+        return;
+
+    // The SDF render area extends beyond the dock box to cover indicator dots below
+    const float dotMargin = 10.F;
+    const CBox  renderBox = globalBox.copy().expand(dotMargin);
+    const CBox  localRenderBox = renderBox.copy().translate(-monitor->m_position);
+
+    const float renderW = renderBox.w;
+    const float renderH = renderBox.h;
+    const int   iconSize = **PICONSIZE;
+
+    glUseProgram(m_shaderProgram);
+    GLint loc;
+
+    // Vertex shader uniforms: map quad to monitor-local coordinates
+    loc = glGetUniformLocation(m_shaderProgram, "u_topLeft");
+    glUniform2f(loc, localRenderBox.x, localRenderBox.y);
+    loc = glGetUniformLocation(m_shaderProgram, "u_fullSize");
+    glUniform2f(loc, localRenderBox.w, localRenderBox.h);
+    loc = glGetUniformLocation(m_shaderProgram, "u_monitorSize");
+    glUniform2f(loc, monitor->m_size.x, monitor->m_size.y);
+
+    // Fragment shader uniforms
+    loc = glGetUniformLocation(m_shaderProgram, "u_resolution");
+    glUniform2f(loc, renderW, renderH);
+
+    CHyprColor dockColor = **PCOLOR;
+    loc = glGetUniformLocation(m_shaderProgram, "u_dockColor");
+    glUniform4f(loc, dockColor.r, dockColor.g, dockColor.b, dockColor.a * alpha);
+
+    // Icon blobs — these merge together via smooth-min to form the dock
+    loc = glGetUniformLocation(m_shaderProgram, "u_numIcons");
+    glUniform1i(loc, numIcons);
+    loc = glGetUniformLocation(m_shaderProgram, "u_threshold");
+    glUniform1f(loc, **PTHRESHOLD);
+
+    for (int i = 0; i < numIcons; ++i) {
+        const auto& item = g_pGlobalState->items[i];
+        if (!item.position || !item.size)
+            continue;
+
+        // Icon positions relative to the render area
+        const auto globalPos = item.position->value();
+        const float posX = globalPos.x - renderBox.x;
+        const float posY = globalPos.y - renderBox.y;
+
+        const float scale = getMagnificationScale(i, m_fCursorX);
+        const float sz = iconSize * scale;
+
+        char buf[128];
+        snprintf(buf, sizeof(buf), "u_iconPositions[%d]", i);
+        loc = glGetUniformLocation(m_shaderProgram, buf);
+        glUniform2f(loc, posX, posY);
+
+        snprintf(buf, sizeof(buf), "u_iconSizes[%d]", i);
+        loc = glGetUniformLocation(m_shaderProgram, buf);
+        glUniform2f(loc, sz, sz);
+
+        snprintf(buf, sizeof(buf), "u_iconRoundings[%d]", i);
+        loc = glGetUniformLocation(m_shaderProgram, buf);
+        glUniform1f(loc, sz * 0.2F);
+    }
+
+    // Running indicator dots
+    int numDots = 0;
+    for (int i = 0; i < numIcons; ++i) {
+        const auto& item = g_pGlobalState->items[i];
+        if (!item.running || !item.position)
+            continue;
+
+        const auto globalPos = item.position->value();
+        const float scale = getMagnificationScale(i, m_fCursorX);
+        const float half = iconSize * scale * 0.5F;
+
+        const float dotX = globalPos.x - renderBox.x;
+        const float dotY = globalPos.y + half + 4.F - renderBox.y;
+        const float dotR = 2.5F;
+
+        char buf[128];
+        snprintf(buf, sizeof(buf), "u_dotPositions[%d]", numDots);
+        loc = glGetUniformLocation(m_shaderProgram, buf);
+        glUniform2f(loc, dotX, dotY);
+
+        snprintf(buf, sizeof(buf), "u_dotRadii[%d]", numDots);
+        loc = glGetUniformLocation(m_shaderProgram, buf);
+        glUniform1f(loc, dotR);
+
+        numDots++;
+    }
+    loc = glGetUniformLocation(m_shaderProgram, "u_numDots");
+    glUniform1i(loc, numDots);
+
+    CHyprColor indicatorColor = **PINDICATORCOLOR;
+    loc = glGetUniformLocation(m_shaderProgram, "u_dotColor");
+    glUniform4f(loc, indicatorColor.r, indicatorColor.g, indicatorColor.b, indicatorColor.a * alpha);
+
+    // Draw quad mapped to the dock render area
+    // clang-format off
+    float vertices[] = {
+        0.F, 0.F,  0.F, 0.F,
+        1.F, 0.F,  1.F, 0.F,
+        1.F, 1.F,  1.F, 1.F,
+        0.F, 1.F,  0.F, 1.F,
+    };
+    // clang-format on
+
+    GLuint vao, vbo;
+    glGenVertexArrays(1, &vao);
+    glGenBuffers(1, &vbo);
+
+    glBindVertexArray(vao);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+
+    glBindVertexArray(0);
+    glDeleteBuffers(1, &vbo);
+    glDeleteVertexArrays(1, &vao);
+
+    glUseProgram(0);
 }
 
 void CLiquidDock::renderDockIcons(PHLMONITOR monitor, float alpha) {
-    static auto* const PICONSIZE       = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:liquiddock:icon_size")->getDataStaticPtr();
-    static auto* const PINDICATORCOLOR = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:liquiddock:indicator_color")->getDataStaticPtr();
+    static auto* const PICONSIZE = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:liquiddock:icon_size")->getDataStaticPtr();
 
-    const int   iconSize = **PICONSIZE;
-    const float halfSize = iconSize * 0.5F;
+    const int iconSize = **PICONSIZE;
 
     for (size_t i = 0; i < g_pGlobalState->items.size(); ++i) {
         const auto& item = g_pGlobalState->items[i];
@@ -484,107 +656,7 @@ void CLiquidDock::renderDockIcons(PHLMONITOR monitor, float alpha) {
             CHyprColor iconColor = item.focused ? CHyprColor{0.4F, 0.6F, 1.F, alpha} : CHyprColor{0.5F, 0.5F, 0.5F, alpha};
             g_pHyprOpenGL->renderRect(iconBox, iconColor, {.round = static_cast<int>(sz * 0.2F)});
         }
-
-        // Running indicator dot
-        if (item.running) {
-            CHyprColor indColor = **PINDICATORCOLOR;
-            indColor.a *= alpha;
-            const float dotSize = 4.F;
-            CBox        dotBox  = {pos.x - dotSize * 0.5F - monitor->m_position.x, pos.y + half + 2.F - monitor->m_position.y, dotSize, dotSize};
-            g_pHyprOpenGL->renderRect(dotBox, indColor, {.round = static_cast<int>(dotSize * 0.5F)});
-        }
     }
-}
-
-void CLiquidDock::renderGooeyEffect(PHLMONITOR monitor, float alpha) {
-    static auto* const PGOOEY     = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:liquiddock:gooey_effect")->getDataStaticPtr();
-    static auto* const PTHRESHOLD = (Hyprlang::FLOAT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:liquiddock:gooey_threshold")->getDataStaticPtr();
-    static auto* const PCOLOR     = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:liquiddock:dock_color")->getDataStaticPtr();
-
-    if (!**PGOOEY || !m_shaderProgram || g_pGlobalState->items.empty())
-        return;
-
-    const CBox box = dockBoxGlobal().translate(-monitor->m_position);
-    if (box.empty())
-        return;
-
-    const int numIcons = std::min((int)g_pGlobalState->items.size(), 32);
-
-    glUseProgram(m_shaderProgram);
-
-    // Set uniforms
-    GLint loc;
-
-    loc = glGetUniformLocation(m_shaderProgram, "u_numIcons");
-    glUniform1i(loc, numIcons);
-
-    loc = glGetUniformLocation(m_shaderProgram, "u_threshold");
-    glUniform1f(loc, **PTHRESHOLD);
-
-    loc = glGetUniformLocation(m_shaderProgram, "u_resolution");
-    glUniform2f(loc, box.w, box.h);
-
-    CHyprColor dockColor = **PCOLOR;
-    loc = glGetUniformLocation(m_shaderProgram, "u_dockColor");
-    glUniform4f(loc, dockColor.r, dockColor.g, dockColor.b, dockColor.a * alpha);
-
-    // Pass icon data
-    for (int i = 0; i < numIcons; ++i) {
-        const auto& item = g_pGlobalState->items[i];
-        if (!item.position || !item.size)
-            continue;
-
-        const auto pos  = item.position->value() - Vector2D{box.x + monitor->m_position.x, box.y + monitor->m_position.y};
-        const auto size = item.size->value();
-
-        char buf[128];
-        snprintf(buf, sizeof(buf), "u_iconPositions[%d]", i);
-        loc = glGetUniformLocation(m_shaderProgram, buf);
-        glUniform2f(loc, pos.x, pos.y);
-
-        snprintf(buf, sizeof(buf), "u_iconSizes[%d]", i);
-        loc = glGetUniformLocation(m_shaderProgram, buf);
-        glUniform2f(loc, size.x, size.y);
-
-        snprintf(buf, sizeof(buf), "u_iconRoundings[%d]", i);
-        loc = glGetUniformLocation(m_shaderProgram, buf);
-        glUniform1f(loc, size.x * 0.2F);
-
-        snprintf(buf, sizeof(buf), "u_iconAlphas[%d]", i);
-        loc = glGetUniformLocation(m_shaderProgram, buf);
-        glUniform1f(loc, alpha);
-    }
-
-    // Draw fullscreen quad covering the dock area
-    // clang-format off
-    float vertices[] = {
-        -1.F, -1.F,  0.F, 0.F,
-         1.F, -1.F,  1.F, 0.F,
-         1.F,  1.F,  1.F, 1.F,
-        -1.F,  1.F,  0.F, 1.F,
-    };
-    // clang-format on
-
-    GLuint vao, vbo;
-    glGenVertexArrays(1, &vao);
-    glGenBuffers(1, &vbo);
-
-    glBindVertexArray(vao);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
-
-    glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
-
-    glBindVertexArray(0);
-    glDeleteBuffers(1, &vbo);
-    glDeleteVertexArrays(1, &vao);
-
-    glUseProgram(0);
 }
 
 void CLiquidDock::renderPass(PHLMONITOR monitor, float const& a) {
@@ -619,9 +691,9 @@ void CLiquidDock::renderPass(PHLMONITOR monitor, float const& a) {
         m_bItemsDirty = false;
     }
 
-    // Render layers
-    renderDockBackground(monitor, a);
-    renderGooeyEffect(monitor, a);
+    // Render layers: SDF pass draws dock background, gooey blobs, and indicator dots
+    renderDockSDF(monitor, a);
+    // Icon textures/placeholders are rendered separately on top
     renderDockIcons(monitor, a);
 
     // Request damage so the dock area is redrawn next frame

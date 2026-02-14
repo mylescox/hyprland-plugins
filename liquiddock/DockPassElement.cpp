@@ -16,6 +16,9 @@ void CDockPassElement::draw(const CRegion& damage) {
 bool CDockPassElement::needsLiveBlur() {
     static auto* const PBLUR    = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:liquiddock:dock_blur")->getDataStaticPtr();
     static auto* const PBLURGLB = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "decoration:blur:enabled")->getDataStaticPtr();
+    static auto* const PENABLED = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:liquiddock:enabled")->getDataStaticPtr();
+    if (!**PENABLED)
+        return false;
     return **PBLUR && **PBLURGLB;
 }
 
@@ -23,13 +26,18 @@ bool CDockPassElement::needsPrecomputeBlur() {
     return false;
 }
 
-std::optional<CBox> CDockPassElement::boundingBox() {
-    const auto targetMonitor = data.dock->getTargetMonitor();
-    const auto renderMonitor = g_pHyprOpenGL->m_renderData.pMonitor.lock();
+bool CDockPassElement::undiscardable() {
+    return true;
+}
 
-    // Only provide a bounding box when rendering the dock's target monitor
-    if (!targetMonitor || !renderMonitor || targetMonitor != renderMonitor)
+std::optional<CBox> CDockPassElement::boundingBox() {
+    const auto renderMonitor = g_pHyprOpenGL->m_renderData.pMonitor.lock();
+    if (!renderMonitor)
         return std::nullopt;
+
+    const auto targetMonitor = data.dock->getTargetMonitor();
+    if (!targetMonitor || targetMonitor != renderMonitor)
+        return CBox{};
 
     return data.dock->dockBoxGlobal().translate(-renderMonitor->m_position).expand(10);
 }

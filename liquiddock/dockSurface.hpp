@@ -39,9 +39,8 @@ class CLiquidDock {
     // Icon management
     void                 rebuildDockItems();
     void                 layoutIcons();
-    void                 renderDockBackground(PHLMONITOR monitor, float alpha);
+    void                 renderDockSDF(PHLMONITOR monitor, float alpha);
     void                 renderDockIcons(PHLMONITOR monitor, float alpha);
-    void                 renderGooeyEffect(PHLMONITOR monitor, float alpha);
 
     // Input handling
     void                 onMouseButton(SCallbackInfo& info, IPointer::SButtonEvent e);
