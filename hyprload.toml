@@ -20,3 +20,15 @@ output = "hyprpill/hyprpill.so"
 steps = [
     "make -C hyprpill all",
 ]
+
+
+[liquiddock]
+description = "A dock plugin with gooey SDF rendering and physics-based animations"
+version = "0.1"
+authors = ["mylescox"]
+
+[liquiddock.build]
+output = "liquiddock/liquiddock.so"
+steps = [
+    "make -C liquiddock all",
+]
