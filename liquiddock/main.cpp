@@ -4,11 +4,13 @@
 
 #include <any>
 #include <hyprland/src/Compositor.hpp>
+#include <hyprland/src/SharedDefs.hpp>
 #include <hyprland/src/desktop/view/Window.hpp>
 #include <hyprland/src/config/ConfigManager.hpp>
 #include <hyprland/src/render/Renderer.hpp>
 
 #include "dockSurface.hpp"
+#include "DockPassElement.hpp"
 #include "globals.hpp"
 
 // Do NOT change this function.
@@ -84,6 +86,18 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     static auto P2 = HyprlandAPI::registerCallbackDynamic(PHANDLE, "closeWindow", [&](void* self, SCallbackInfo& info, std::any data) { onCloseWindow(self, data); });
     static auto P3 = HyprlandAPI::registerCallbackDynamic(PHANDLE, "activeWindow", [&](void* self, SCallbackInfo& info, std::any data) { onWindowFocus(self, data); });
     static auto P4 = HyprlandAPI::registerCallbackDynamic(PHANDLE, "preConfigReload", [&](void* self, SCallbackInfo& info, std::any data) { onPreConfigReload(); });
+    static auto P5 = HyprlandAPI::registerCallbackDynamic(PHANDLE, "render", [&](void* self, SCallbackInfo& info, std::any data) {
+        const auto stage = std::any_cast<eRenderStage>(data);
+        if (stage != RENDER_POST_WINDOWS)
+            return;
+
+        auto dock = g_pGlobalState->dock.lock();
+        if (!dock)
+            return;
+
+        auto passData = CDockPassElement::SDockData{dock.get(), 1.F};
+        g_pHyprRenderer->m_renderPass.add(makeUnique<CDockPassElement>(passData));
+    });
 
     // Register configuration values
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:liquiddock:enabled", Hyprlang::INT{1});
