@@ -1103,8 +1103,13 @@ void CHyprPill::removeScoot() {
         return;
 
     const auto PWINDOW = m_pWindow.lock();
-    if (PWINDOW)
-        PWINDOW->m_floatingOffset.x -= m_scootApplied;
+    if (PWINDOW) {
+        const auto curPos  = PWINDOW->m_realPosition->value() + PWINDOW->m_floatingOffset;
+        const auto targetX = static_cast<int>(std::lround(curPos.x - m_scootApplied));
+        const auto targetY = static_cast<int>(std::lround(curPos.y));
+        g_pKeybindManager->m_dispatchers["movewindowpixel"](
+            std::format("exact {} {},address:0x{:x}", targetX, targetY, (uintptr_t)PWINDOW.get()));
+    }
 
     m_scootApplied = 0.F;
     m_scootOffset  = 0.F;
@@ -1138,7 +1143,11 @@ void CHyprPill::updateScoot() {
     // Apply the delta between the desired scoot and what is already applied.
     const float delta = m_scootOffset - m_scootApplied;
     if (std::abs(delta) > 0.001F) {
-        PWINDOW->m_floatingOffset.x += delta;
+        const auto curPos  = PWINDOW->m_realPosition->value() + PWINDOW->m_floatingOffset;
+        const auto targetX = static_cast<int>(std::lround(curPos.x + delta));
+        const auto targetY = static_cast<int>(std::lround(curPos.y));
+        g_pKeybindManager->m_dispatchers["movewindowpixel"](
+            std::format("exact {} {},address:0x{:x}", targetX, targetY, (uintptr_t)PWINDOW.get()));
         // Shift the geometry animation position by the same delta so the
         // pill stays locked to the window rather than lagging behind.
         if (m_geometryAnimInitialized)
