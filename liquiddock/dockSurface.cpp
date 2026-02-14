@@ -2,12 +2,14 @@
 
 #include <hyprland/src/Compositor.hpp>
 #include <hyprland/src/desktop/view/Window.hpp>
+#include <hyprland/src/desktop/state/FocusState.hpp>
 #include <hyprland/src/helpers/MiscFunctions.hpp>
 #include <hyprland/src/managers/SeatManager.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
 #include <hyprland/src/render/Renderer.hpp>
 #include <hyprland/src/config/ConfigManager.hpp>
 #include <hyprland/src/managers/animation/AnimationManager.hpp>
+#include <hyprland/src/debug/log/Logger.hpp>
 #include <algorithm>
 #include <cmath>
 
@@ -118,7 +120,7 @@ static GLuint compileShader(GLenum type, const char* src) {
     if (!compiled) {
         char log[512];
         glGetShaderInfoLog(shader, sizeof(log), nullptr, log);
-        Debug::log(ERR, "[LiquidDock] Shader compile error: {}", log);
+        Log::logger->log(Log::ERR, "[LiquidDock] Shader compile error: {}", log);
         glDeleteShader(shader);
         return 0;
     }
@@ -147,7 +149,7 @@ void CLiquidDock::initShader() {
     if (!linked) {
         char log[512];
         glGetProgramInfoLog(m_shaderProgram, sizeof(log), nullptr, log);
-        Debug::log(ERR, "[LiquidDock] Shader link error: {}", log);
+        Log::logger->log(Log::ERR, "[LiquidDock] Shader link error: {}", log);
         glDeleteProgram(m_shaderProgram);
         m_shaderProgram = 0;
     }
@@ -173,7 +175,7 @@ CBox CLiquidDock::dockBoxGlobal() const {
     static auto* const PICONSIZE = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:liquiddock:icon_size")->getDataStaticPtr();
     static auto* const PSPACING  = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:liquiddock:icon_spacing")->getDataStaticPtr();
 
-    const auto PMONITOR = g_pCompositor->m_lastMonitor.lock();
+    const auto PMONITOR = g_pCompositor->getMonitorFromCursor();
     if (!PMONITOR)
         return {};
 
@@ -223,7 +225,7 @@ void CLiquidDock::rebuildDockItems() {
 
         if (it != items.end()) {
             it->running = true;
-            if (w == g_pCompositor->m_lastWindow.lock())
+            if (w == Desktop::focusState()->window())
                 it->focused = true;
         } else {
             // Add new running app to dock
@@ -231,7 +233,7 @@ void CLiquidDock::rebuildDockItems() {
             newItem.appId       = appId;
             newItem.displayName = w->m_title.empty() ? appId : w->m_title;
             newItem.running     = true;
-            newItem.focused     = (w == g_pCompositor->m_lastWindow.lock());
+            newItem.focused     = (w == Desktop::focusState()->window());
             items.push_back(std::move(newItem));
         }
     }
@@ -396,7 +398,7 @@ void CLiquidDock::launchApp(const SDockItem& item) {
             if (w->isHidden() || !w->m_isMapped)
                 continue;
             if (w->m_initialClass == item.appId) {
-                g_pCompositor->focusWindow(w);
+                Desktop::focusState()->fullWindowFocus(w);
                 return;
             }
         }
@@ -425,7 +427,7 @@ void CLiquidDock::damageEntire() {
 
         CBox monBox = {m->m_position, m->m_size};
         if (monBox.overlaps(box))
-            g_pHyprRenderer->damageBox(&box);
+            g_pHyprRenderer->damageBox(box);
     }
 }
 
@@ -440,7 +442,7 @@ void CLiquidDock::renderDockBackground(PHLMONITOR monitor, float alpha) {
     CHyprColor dockColor = **PCOLOR;
     dockColor.a *= alpha;
 
-    g_pHyprOpenGL->renderRoundedRect(box, dockColor, **PRADIUS);
+    g_pHyprOpenGL->renderRect(box, dockColor, {.round = **PRADIUS});
 }
 
 void CLiquidDock::renderDockIcons(PHLMONITOR monitor, float alpha) {
@@ -464,11 +466,11 @@ void CLiquidDock::renderDockIcons(PHLMONITOR monitor, float alpha) {
 
         // Render icon texture if available, otherwise render a placeholder rounded rect
         if (item.iconTex && item.iconTex->m_texID) {
-            g_pHyprOpenGL->renderTexture(item.iconTex, &iconBox, alpha);
+            g_pHyprOpenGL->renderTexture(item.iconTex, iconBox, {.a = alpha});
         } else {
             // Placeholder: colored rounded square with first letter
             CHyprColor iconColor = item.focused ? CHyprColor{0.4F, 0.6F, 1.F, alpha} : CHyprColor{0.5F, 0.5F, 0.5F, alpha};
-            g_pHyprOpenGL->renderRoundedRect(iconBox, iconColor, sz * 0.2F);
+            g_pHyprOpenGL->renderRect(iconBox, iconColor, {.round = static_cast<int>(sz * 0.2F)});
         }
 
         // Running indicator dot
@@ -477,7 +479,7 @@ void CLiquidDock::renderDockIcons(PHLMONITOR monitor, float alpha) {
             indColor.a *= alpha;
             const float dotSize = 4.F;
             CBox        dotBox  = {pos.x - dotSize * 0.5F - monitor->m_position.x, pos.y + half + 2.F - monitor->m_position.y, dotSize, dotSize};
-            g_pHyprOpenGL->renderRoundedRect(dotBox, indColor, dotSize * 0.5F);
+            g_pHyprOpenGL->renderRect(dotBox, indColor, {.round = static_cast<int>(dotSize * 0.5F)});
         }
     }
 }
