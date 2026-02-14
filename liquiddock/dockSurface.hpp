@@ -15,6 +15,7 @@ class CLiquidDock {
 
     void         renderPass(PHLMONITOR monitor, float const& a);
     CBox         dockBoxGlobal() const;
+    PHLMONITOR   getTargetMonitor() const;
     void         onWindowOpen(PHLWINDOW window);
     void         onWindowClose(PHLWINDOW window);
     void         onWindowFocus(PHLWINDOW window);
@@ -38,9 +39,8 @@ class CLiquidDock {
     // Icon management
     void                 rebuildDockItems();
     void                 layoutIcons();
-    void                 renderDockBackground(PHLMONITOR monitor, float alpha);
+    void                 renderDockSDF(PHLMONITOR monitor, float alpha);
     void                 renderDockIcons(PHLMONITOR monitor, float alpha);
-    void                 renderGooeyEffect(PHLMONITOR monitor, float alpha);
 
     // Input handling
     void                 onMouseButton(SCallbackInfo& info, IPointer::SButtonEvent e);

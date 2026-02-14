@@ -17,6 +17,7 @@ class CDockPassElement : public IPassElement {
     virtual void                draw(const CRegion& damage);
     virtual bool                needsLiveBlur();
     virtual bool                needsPrecomputeBlur();
+    virtual bool                undiscardable();
     virtual std::optional<CBox> boundingBox();
 
     virtual const char*         passName() {
