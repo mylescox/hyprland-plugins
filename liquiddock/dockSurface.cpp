@@ -490,7 +490,7 @@ void CLiquidDock::damageEntire() {
         return;
 
     // Expand to cover indicator dots below the dock
-    g_pHyprRenderer->damageBox(box.expand(DOT_MARGIN));
+    g_pHyprRenderer->damageBox(box.copy().expand(DOT_MARGIN));
 }
 
 void CLiquidDock::renderDockSDF(PHLMONITOR monitor, float alpha) {

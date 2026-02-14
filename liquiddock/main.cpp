@@ -128,7 +128,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
 
     const auto targetMon = dock->getTargetMonitor();
     const auto box       = dock->dockBoxGlobal();
-    Log::logger->log(Log::LOG, "[LiquidDock] Initialized on monitor {} at ({}, {}) size {}x{}", targetMon ? targetMon->m_name : "none", box.x, box.y, box.w, box.h);
+    Log::logger->log(Log::DEBUG, "[LiquidDock] Initialized on monitor {} at ({}, {}) size {}x{}", targetMon ? targetMon->m_name : "none", box.x, box.y, box.w, box.h);
 
     return {"liquiddock", "A dock plugin with gooey SDF rendering and physics-based animations.", "mylescox", "0.1"};
 }
