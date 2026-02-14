@@ -24,5 +24,12 @@ bool CDockPassElement::needsPrecomputeBlur() {
 }
 
 std::optional<CBox> CDockPassElement::boundingBox() {
-    return data.dock->dockBoxGlobal().translate(-g_pHyprOpenGL->m_renderData.pMonitor->m_position).expand(10);
+    const auto targetMonitor = data.dock->getTargetMonitor();
+    const auto renderMonitor = g_pHyprOpenGL->m_renderData.pMonitor.lock();
+
+    // Only provide a bounding box when rendering the dock's target monitor
+    if (!targetMonitor || !renderMonitor || targetMonitor != renderMonitor)
+        return std::nullopt;
+
+    return data.dock->dockBoxGlobal().translate(-renderMonitor->m_position).expand(10);
 }

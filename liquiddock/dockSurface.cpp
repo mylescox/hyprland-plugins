@@ -170,13 +170,31 @@ void CLiquidDock::destroyShader() {
 // Dock geometry
 // ────────────────────────────────────────────────────────────────────────────
 
+PHLMONITOR CLiquidDock::getTargetMonitor() const {
+    static auto* const PMONITORNAME = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:liquiddock:monitor")->getDataStaticPtr();
+
+    const std::string monName = *PMONITORNAME;
+    if (!monName.empty()) {
+        for (auto& m : g_pCompositor->m_monitors) {
+            if (m && m->m_name == monName)
+                return m;
+        }
+    }
+
+    // Default: use the first monitor (primary)
+    if (!g_pCompositor->m_monitors.empty())
+        return g_pCompositor->m_monitors.front();
+
+    return nullptr;
+}
+
 CBox CLiquidDock::dockBoxGlobal() const {
     static auto* const PHEIGHT  = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:liquiddock:dock_height")->getDataStaticPtr();
     static auto* const PPADDING = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:liquiddock:dock_padding")->getDataStaticPtr();
     static auto* const PICONSIZE = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:liquiddock:icon_size")->getDataStaticPtr();
     static auto* const PSPACING  = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:liquiddock:icon_spacing")->getDataStaticPtr();
 
-    const auto PMONITOR = g_pCompositor->getMonitorFromCursor();
+    const auto PMONITOR = getTargetMonitor();
     if (!PMONITOR)
         return {};
 
@@ -422,14 +440,7 @@ void CLiquidDock::damageEntire() {
     if (box.empty())
         return;
 
-    for (auto& m : g_pCompositor->m_monitors) {
-        if (!m)
-            continue;
-
-        CBox monBox = {m->m_position, m->m_size};
-        if (monBox.overlaps(box))
-            g_pHyprRenderer->damageBox(box);
-    }
+    g_pHyprRenderer->damageBox(box);
 }
 
 void CLiquidDock::renderDockBackground(PHLMONITOR monitor, float alpha) {
@@ -583,6 +594,11 @@ void CLiquidDock::renderPass(PHLMONITOR monitor, float const& a) {
     if (!**PENABLED)
         return;
 
+    // Only render on the target monitor
+    const auto targetMonitor = getTargetMonitor();
+    if (!targetMonitor || monitor != targetMonitor)
+        return;
+
     // Auto-hide logic
     if (**PAUTOHIDE && !g_pGlobalState->dockHovered) {
         if (!m_bAutoHideActive) {
@@ -607,4 +623,7 @@ void CLiquidDock::renderPass(PHLMONITOR monitor, float const& a) {
     renderDockBackground(monitor, a);
     renderGooeyEffect(monitor, a);
     renderDockIcons(monitor, a);
+
+    // Request damage so the dock area is redrawn next frame
+    damageEntire();
 }

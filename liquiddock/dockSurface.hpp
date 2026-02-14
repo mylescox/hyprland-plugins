@@ -15,6 +15,7 @@ class CLiquidDock {
 
     void         renderPass(PHLMONITOR monitor, float const& a);
     CBox         dockBoxGlobal() const;
+    PHLMONITOR   getTargetMonitor() const;
     void         onWindowOpen(PHLWINDOW window);
     void         onWindowClose(PHLWINDOW window);
     void         onWindowFocus(PHLWINDOW window);

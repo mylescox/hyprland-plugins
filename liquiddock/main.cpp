@@ -8,6 +8,7 @@
 #include <hyprland/src/desktop/view/Window.hpp>
 #include <hyprland/src/config/ConfigManager.hpp>
 #include <hyprland/src/render/Renderer.hpp>
+#include <hyprland/src/debug/log/Logger.hpp>
 
 #include "dockSurface.hpp"
 #include "DockPassElement.hpp"
@@ -101,6 +102,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
 
     // Register configuration values
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:liquiddock:enabled", Hyprlang::INT{1});
+    HyprlandAPI::addConfigValue(PHANDLE, "plugin:liquiddock:monitor", Hyprlang::STRING{""});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:liquiddock:dock_height", Hyprlang::INT{64});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:liquiddock:dock_padding", Hyprlang::INT{8});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:liquiddock:dock_color", Hyprlang::INT{*configStringToInt("rgba(1a1a1aDD)")});
@@ -123,6 +125,10 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     g_pGlobalState->dock = dock;
 
     HyprlandAPI::reloadConfig();
+
+    const auto targetMon = dock->getTargetMonitor();
+    const auto box       = dock->dockBoxGlobal();
+    Log::logger->log(Log::LOG, "[LiquidDock] Initialized on monitor {} at ({}, {}) size {}x{}", targetMon ? targetMon->m_name : "none", box.x, box.y, box.w, box.h);
 
     return {"liquiddock", "A dock plugin with gooey SDF rendering and physics-based animations.", "mylescox", "0.1"};
 }
