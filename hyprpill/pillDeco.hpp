@@ -110,6 +110,7 @@ class CHyprPill : public IHyprWindowDecoration {
     mutable int               m_lastFramePinnedEdge  = 0;
 
     mutable float             m_scootTarget          = 0.F;
+    mutable int               m_scootDir             = 0;
     float                     m_scootOffset          = 0.F;
     float                     m_scootApplied         = 0.F;
     Time::steady_tp           m_scootAnimLastTick    = Time::steadyNow();
