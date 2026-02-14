@@ -64,6 +64,7 @@ class CLiquidDock {
     float                m_fDockHeight    = 0;
     float                m_fCursorX       = -1.F;
     float                m_fCursorY       = -1.F;
+    bool                 m_bItemsDirty    = true;
 
     friend class CDockPassElement;
 };

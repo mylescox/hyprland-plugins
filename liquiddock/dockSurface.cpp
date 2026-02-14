@@ -303,33 +303,17 @@ float CLiquidDock::getMagnificationScale(int iconIndex, float cursorX) const {
 // ────────────────────────────────────────────────────────────────────────────
 
 void CLiquidDock::onWindowOpen(PHLWINDOW window) {
-    rebuildDockItems();
-    layoutIcons();
+    m_bItemsDirty = true;
     damageEntire();
 }
 
 void CLiquidDock::onWindowClose(PHLWINDOW window) {
-    rebuildDockItems();
-    layoutIcons();
+    m_bItemsDirty = true;
     damageEntire();
 }
 
 void CLiquidDock::onWindowFocus(PHLWINDOW window) {
-    // Update focus state
-    for (auto& item : g_pGlobalState->items) {
-        item.focused = false;
-    }
-
-    if (!window)
-        return;
-
-    const std::string appId = window->m_initialClass;
-    for (auto& item : g_pGlobalState->items) {
-        if (item.appId == appId) {
-            item.focused = true;
-            break;
-        }
-    }
+    m_bItemsDirty = true;
     damageEntire();
 }
 
@@ -378,10 +362,8 @@ void CLiquidDock::onMouseButton(SCallbackInfo& info, IPointer::SButtonEvent e) {
             auto& item = g_pGlobalState->items[idx];
             if (item.pinned) {
                 item.pinned = false;
-                if (!item.running) {
-                    rebuildDockItems();
-                    layoutIcons();
-                }
+                if (!item.running)
+                    m_bItemsDirty = true;
             } else {
                 item.pinned = true;
             }
@@ -611,9 +593,12 @@ void CLiquidDock::renderPass(PHLMONITOR monitor, float const& a) {
         m_bAutoHideActive = false;
     }
 
-    // Update dock items from window state
-    rebuildDockItems();
-    layoutIcons();
+    // Update dock items only when state has changed
+    if (m_bItemsDirty) {
+        rebuildDockItems();
+        layoutIcons();
+        m_bItemsDirty = false;
+    }
 
     // Render layers
     renderDockBackground(monitor, a);

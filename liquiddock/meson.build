@@ -21,8 +21,6 @@ add_project_arguments(
 globber = run_command('find', '.', '-name', '*.cpp', check: true)
 src = globber.stdout().strip().split('\n')
 
-hyprland = dependency('hyprland')
-
 shared_module(meson.project_name(), src,
   dependencies: [
     dependency('hyprland'),
