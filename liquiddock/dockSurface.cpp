@@ -17,6 +17,14 @@
 #include "DockPassElement.hpp"
 
 // ────────────────────────────────────────────────────────────────────────────
+// Constants for SDF rendering geometry
+// ────────────────────────────────────────────────────────────────────────────
+
+static constexpr float DOT_RADIUS     = 2.5F;  // Running indicator dot radius
+static constexpr float DOT_OFFSET_Y   = 4.F;   // Vertical offset of dots below icons
+static constexpr float DOT_MARGIN     = 10.F;   // Extra render area for indicator dots
+
+// ────────────────────────────────────────────────────────────────────────────
 // Gooey SDF fragment shader source (embedded)
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -482,7 +490,7 @@ void CLiquidDock::damageEntire() {
         return;
 
     // Expand to cover indicator dots below the dock
-    g_pHyprRenderer->damageBox(box.expand(8));
+    g_pHyprRenderer->damageBox(box.expand(DOT_MARGIN));
 }
 
 void CLiquidDock::renderDockSDF(PHLMONITOR monitor, float alpha) {
@@ -503,8 +511,7 @@ void CLiquidDock::renderDockSDF(PHLMONITOR monitor, float alpha) {
         return;
 
     // The SDF render area extends beyond the dock box to cover indicator dots below
-    const float dotMargin = 10.F;
-    const CBox  renderBox = globalBox.copy().expand(dotMargin);
+    const CBox  renderBox = globalBox.copy().expand(DOT_MARGIN);
     const CBox  localRenderBox = renderBox.copy().translate(-monitor->m_position);
 
     const float renderW = renderBox.w;
@@ -575,8 +582,7 @@ void CLiquidDock::renderDockSDF(PHLMONITOR monitor, float alpha) {
         const float half = iconSize * scale * 0.5F;
 
         const float dotX = globalPos.x - renderBox.x;
-        const float dotY = globalPos.y + half + 4.F - renderBox.y;
-        const float dotR = 2.5F;
+        const float dotY = globalPos.y + half + DOT_OFFSET_Y - renderBox.y;
 
         char buf[128];
         snprintf(buf, sizeof(buf), "u_dotPositions[%d]", numDots);
@@ -585,7 +591,7 @@ void CLiquidDock::renderDockSDF(PHLMONITOR monitor, float alpha) {
 
         snprintf(buf, sizeof(buf), "u_dotRadii[%d]", numDots);
         loc = glGetUniformLocation(m_shaderProgram, buf);
-        glUniform1f(loc, dotR);
+        glUniform1f(loc, DOT_RADIUS);
 
         numDots++;
     }
