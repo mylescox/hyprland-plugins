@@ -20,6 +20,7 @@
 #include <hyprland/src/managers/cursor/CursorShapeOverrideController.hpp>
 #include <hyprland/src/render/OpenGL.hpp>
 #include <hyprland/src/render/Renderer.hpp>
+#include <hyprland/src/event/EventBus.hpp>
 
 #include "PillPassElement.hpp"
 #include "globals.hpp"
@@ -95,16 +96,11 @@ std::vector<SHorizontalInterval> subtractForbiddenIntervals(const SHorizontalInt
 }
 
 CHyprPill::CHyprPill(PHLWINDOW pWindow) : IHyprWindowDecoration(pWindow), m_pWindow(pWindow) {
-    m_pMouseButtonCallback = HyprlandAPI::registerCallbackDynamic(
-        PHANDLE, "mouseButton", [&](void* self, SCallbackInfo& info, std::any param) { onMouseButton(info, std::any_cast<IPointer::SButtonEvent>(param)); });
-    m_pTouchDownCallback = HyprlandAPI::registerCallbackDynamic(
-        PHANDLE, "touchDown", [&](void* self, SCallbackInfo& info, std::any param) { onTouchDown(info, std::any_cast<ITouch::SDownEvent>(param)); });
-    m_pTouchUpCallback = HyprlandAPI::registerCallbackDynamic(
-        PHANDLE, "touchUp", [&](void* self, SCallbackInfo& info, std::any param) { onTouchUp(info, std::any_cast<ITouch::SUpEvent>(param)); });
-    m_pTouchMoveCallback = HyprlandAPI::registerCallbackDynamic(
-        PHANDLE, "touchMove", [&](void* self, SCallbackInfo& info, std::any param) { onTouchMove(info, std::any_cast<ITouch::SMotionEvent>(param)); });
-    m_pMouseMoveCallback = HyprlandAPI::registerCallbackDynamic(
-        PHANDLE, "mouseMove", [&](void* self, SCallbackInfo& info, std::any param) { onMouseMove(info, std::any_cast<Vector2D>(param)); });
+    m_pMouseButtonCallback = Event::bus()->m_events.input.mouse.button.listen([&](IPointer::SButtonEvent e, Event::SCallbackInfo& info) { onMouseButton(info, e); });
+    m_pTouchDownCallback   = Event::bus()->m_events.input.touch.down.listen([&](ITouch::SDownEvent e, Event::SCallbackInfo& info) { onTouchDown(info, e); });
+    m_pTouchUpCallback     = Event::bus()->m_events.input.touch.up.listen([&](ITouch::SUpEvent e, Event::SCallbackInfo& info) { onTouchUp(info, e); });
+    m_pTouchMoveCallback   = Event::bus()->m_events.input.touch.motion.listen([&](ITouch::SMotionEvent e, Event::SCallbackInfo& info) { onTouchMove(info, e); });
+    m_pMouseMoveCallback   = Event::bus()->m_events.input.mouse.move.listen([&](Vector2D c, Event::SCallbackInfo& info) { onMouseMove(info, c); });
 
     updateStateAndAnimate();
     updateCursorShape();
@@ -116,11 +112,6 @@ CHyprPill::~CHyprPill() {
     if (g_pGlobalState && g_pGlobalState->dragPill.get() == this)
         g_pGlobalState->dragPill.reset();
 
-    HyprlandAPI::unregisterCallback(PHANDLE, m_pMouseButtonCallback);
-    HyprlandAPI::unregisterCallback(PHANDLE, m_pTouchDownCallback);
-    HyprlandAPI::unregisterCallback(PHANDLE, m_pTouchUpCallback);
-    HyprlandAPI::unregisterCallback(PHANDLE, m_pTouchMoveCallback);
-    HyprlandAPI::unregisterCallback(PHANDLE, m_pMouseMoveCallback);
     std::erase(g_pGlobalState->pills, m_self);
     updateCursorShape();
 }
@@ -686,7 +677,7 @@ bool CHyprPill::inputIsValid(bool ignoreSeatGrab) {
     return true;
 }
 
-void CHyprPill::beginDrag(SCallbackInfo& info, const Vector2D& coordsGlobal) {
+void CHyprPill::beginDrag(Event::SCallbackInfo& info, const Vector2D& coordsGlobal) {
     if (!g_pGlobalState->dragPill.expired() && g_pGlobalState->dragPill.get() != this)
         return;
 
@@ -699,7 +690,7 @@ void CHyprPill::beginDrag(SCallbackInfo& info, const Vector2D& coordsGlobal) {
         return;
 
     if (Desktop::focusState()->window() != PWINDOW)
-        Desktop::focusState()->fullWindowFocus(PWINDOW);
+        Desktop::focusState()->fullWindowFocus(PWINDOW, Desktop::FOCUS_REASON_CLICK);
 
     if (PWINDOW->m_isFloating)
         g_pCompositor->changeWindowZOrder(PWINDOW, true);
@@ -726,7 +717,7 @@ void CHyprPill::beginDrag(SCallbackInfo& info, const Vector2D& coordsGlobal) {
     updateCursorShape();
 }
 
-void CHyprPill::endDrag(SCallbackInfo& info) {
+void CHyprPill::endDrag(Event::SCallbackInfo& info) {
     if (m_cancelledDown)
         info.cancelled = true;
 
@@ -736,7 +727,7 @@ void CHyprPill::endDrag(SCallbackInfo& info) {
         const auto PWINDOW = m_pWindow.lock();
         if (PWINDOW) {
             if (Desktop::focusState()->window() != PWINDOW)
-                Desktop::focusState()->fullWindowFocus(PWINDOW);
+                Desktop::focusState()->fullWindowFocus(PWINDOW, Desktop::FOCUS_REASON_CLICK);
             g_pKeybindManager->m_dispatchers["settiled"](std::format("address:0x{:x}", (uintptr_t)PWINDOW.get()));
         }
     }
@@ -793,13 +784,13 @@ bool CHyprPill::focusAndDispatchToWindow(const std::string& dispatcher, const st
         return false;
 
     if (Desktop::focusState()->window() != PWINDOW)
-        Desktop::focusState()->fullWindowFocus(PWINDOW);
+        Desktop::focusState()->fullWindowFocus(PWINDOW, Desktop::FOCUS_REASON_CLICK);
 
     g_pKeybindManager->m_dispatchers[dispatcher](arg);
     return true;
 }
 
-bool CHyprPill::handlePillClickAction(SCallbackInfo& info, uint32_t button) {
+bool CHyprPill::handlePillClickAction(Event::SCallbackInfo& info, uint32_t button) {
     const auto PWINDOW = m_pWindow.lock();
     if (!PWINDOW)
         return false;
@@ -842,7 +833,7 @@ bool CHyprPill::handlePillClickAction(SCallbackInfo& info, uint32_t button) {
     return false;
 }
 
-void CHyprPill::onMouseButton(SCallbackInfo& info, IPointer::SButtonEvent e) {
+void CHyprPill::onMouseButton(Event::SCallbackInfo& info, IPointer::SButtonEvent e) {
     if (e.state != WL_POINTER_BUTTON_STATE_PRESSED) {
         endDrag(info);
         return;
@@ -869,7 +860,7 @@ void CHyprPill::onMouseButton(SCallbackInfo& info, IPointer::SButtonEvent e) {
     beginDrag(info, coordsGlobal);
 }
 
-void CHyprPill::onTouchDown(SCallbackInfo& info, ITouch::SDownEvent e) {
+void CHyprPill::onTouchDown(Event::SCallbackInfo& info, ITouch::SDownEvent e) {
     if (!inputIsValid() || e.touchID != 0)
         return;
 
@@ -882,14 +873,14 @@ void CHyprPill::onTouchDown(SCallbackInfo& info, ITouch::SDownEvent e) {
     beginDrag(info, COORDS);
 }
 
-void CHyprPill::onTouchUp(SCallbackInfo& info, ITouch::SUpEvent e) {
+void CHyprPill::onTouchUp(Event::SCallbackInfo& info, ITouch::SUpEvent e) {
     if (!m_touchEv || e.touchID != m_touchId)
         return;
 
     endDrag(info);
 }
 
-void CHyprPill::onMouseMove(SCallbackInfo& info, Vector2D coords) {
+void CHyprPill::onMouseMove(Event::SCallbackInfo& info, Vector2D coords) {
     const bool dragOwnedByOtherPill = !g_pGlobalState->dragPill.expired() && g_pGlobalState->dragPill.get() != this;
     if (dragOwnedByOtherPill) {
         m_hovered = false;
@@ -910,14 +901,14 @@ void CHyprPill::onMouseMove(SCallbackInfo& info, Vector2D coords) {
         info.cancelled = true;
 
         if (Desktop::focusState()->window() != m_pWindow.lock())
-            Desktop::focusState()->fullWindowFocus(m_pWindow.lock());
+            Desktop::focusState()->fullWindowFocus(m_pWindow.lock(), Desktop::FOCUS_REASON_CLICK);
     }
 
     if (m_draggingThis) {
         info.cancelled = true;
 
         if (Desktop::focusState()->window() != m_pWindow.lock())
-            Desktop::focusState()->fullWindowFocus(m_pWindow.lock());
+            Desktop::focusState()->fullWindowFocus(m_pWindow.lock(), Desktop::FOCUS_REASON_CLICK);
 
         updateDragPosition(coords);
         updateCursorShape(coords);
@@ -933,7 +924,7 @@ void CHyprPill::onMouseMove(SCallbackInfo& info, Vector2D coords) {
 
     if (m_hovered) {
         if (!m_dragPending && Desktop::focusState()->window() != m_pWindow.lock())
-            Desktop::focusState()->fullWindowFocus(m_pWindow.lock());
+            Desktop::focusState()->fullWindowFocus(m_pWindow.lock(), Desktop::FOCUS_REASON_CLICK);
 
         if (!m_dragPending)
             info.cancelled = true;
@@ -953,7 +944,7 @@ void CHyprPill::onMouseMove(SCallbackInfo& info, Vector2D coords) {
     }
 
     if (Desktop::focusState()->window() != m_pWindow.lock())
-        Desktop::focusState()->fullWindowFocus(m_pWindow.lock());
+        Desktop::focusState()->fullWindowFocus(m_pWindow.lock(), Desktop::FOCUS_REASON_CLICK);
 
     m_dragPending  = false;
     info.cancelled = true;
@@ -961,7 +952,7 @@ void CHyprPill::onMouseMove(SCallbackInfo& info, Vector2D coords) {
     updateCursorShape(coords);
 }
 
-void CHyprPill::onTouchMove(SCallbackInfo& info, ITouch::SMotionEvent e) {
+void CHyprPill::onTouchMove(Event::SCallbackInfo& info, ITouch::SMotionEvent e) {
     if ((!m_dragPending && !m_draggingThis) || !m_touchEv || e.touchID != m_touchId || !validMapped(m_pWindow))
         return;
 
@@ -991,7 +982,7 @@ void CHyprPill::updateDragPosition(const Vector2D& coordsGlobal) {
 
     if (!m_draggingThis && m_forceFloatForDrag) {
         if (Desktop::focusState()->window() != PWINDOW)
-            Desktop::focusState()->fullWindowFocus(PWINDOW);
+            Desktop::focusState()->fullWindowFocus(PWINDOW, Desktop::FOCUS_REASON_CLICK);
         g_pKeybindManager->m_dispatchers["setfloating"](std::format("address:0x{:x}", (uintptr_t)PWINDOW.get()));
     }
 

@@ -7,6 +7,7 @@
 #include <hyprland/src/desktop/rule/windowRule/WindowRuleEffectContainer.hpp>
 #include <hyprland/src/desktop/view/Window.hpp>
 #include <hyprland/src/render/Renderer.hpp>
+#include <hyprland/src/event/EventBus.hpp>
 
 #include "globals.hpp"
 #include "pillDeco.hpp"
@@ -15,9 +16,7 @@ APICALL EXPORT std::string PLUGIN_API_VERSION() {
     return HYPRLAND_API_VERSION;
 }
 
-static void onNewWindow(void* self, std::any data) {
-    const auto PWINDOW = std::any_cast<PHLWINDOW>(data);
-
+static void onNewWindow(PHLWINDOW PWINDOW) {
     if (PWINDOW->m_X11DoesntWantBorders)
         return;
 
@@ -57,9 +56,8 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     g_pGlobalState->noPillRuleIdx = Desktop::Rule::windowEffects()->registerEffect("hyprpill:no_pill");
     g_pGlobalState->pillColorRuleIdx = Desktop::Rule::windowEffects()->registerEffect("hyprpill:pill_color");
 
-    static auto P  = HyprlandAPI::registerCallbackDynamic(PHANDLE, "openWindow", [&](void* self, SCallbackInfo& info, std::any data) { onNewWindow(self, data); });
-    static auto P2 =
-        HyprlandAPI::registerCallbackDynamic(PHANDLE, "windowUpdateRules", [&](void* self, SCallbackInfo& info, std::any data) { onUpdateWindowRules(std::any_cast<PHLWINDOW>(data)); });
+    static auto P  = Event::bus()->m_events.window.open.listen([&](PHLWINDOW w) { onNewWindow(w); });
+    static auto P2 = Event::bus()->m_events.window.updateRules.listen([&](PHLWINDOW w) { onUpdateWindowRules(w); });
 
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:enabled", Hyprlang::INT{1});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprpill:pill_width", Hyprlang::INT{100});
@@ -105,7 +103,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
         if (w->isHidden() || !w->m_isMapped)
             continue;
 
-        onNewWindow(nullptr, std::any(w));
+        onNewWindow(w);
     }
 
     HyprlandAPI::reloadConfig();

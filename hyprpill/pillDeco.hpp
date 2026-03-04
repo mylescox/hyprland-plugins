@@ -6,6 +6,7 @@
 #include <hyprland/src/devices/IPointer.hpp>
 #include <hyprland/src/devices/ITouch.hpp>
 #include <hyprland/src/helpers/time/Time.hpp>
+#include <hyprland/src/helpers/signal/Signal.hpp>
 #include <optional>
 #include <chrono>
 #include <string>
@@ -13,6 +14,10 @@
 #define private public
 #include <hyprland/src/managers/input/InputManager.hpp>
 #undef private
+
+namespace Event {
+    struct SCallbackInfo;
+}
 
 enum class ePillVisualState {
     INACTIVE = 0,
@@ -47,15 +52,15 @@ class CHyprPill : public IHyprWindowDecoration {
     WP<CHyprPill>                      m_self;
 
   private:
-    void                      onMouseButton(SCallbackInfo& info, IPointer::SButtonEvent e);
-    void                      onTouchDown(SCallbackInfo& info, ITouch::SDownEvent e);
-    void                      onTouchUp(SCallbackInfo& info, ITouch::SUpEvent e);
-    void                      onMouseMove(SCallbackInfo& info, Vector2D coords);
-    void                      onTouchMove(SCallbackInfo& info, ITouch::SMotionEvent e);
+    void                      onMouseButton(Event::SCallbackInfo& info, IPointer::SButtonEvent e);
+    void                      onTouchDown(Event::SCallbackInfo& info, ITouch::SDownEvent e);
+    void                      onTouchUp(Event::SCallbackInfo& info, ITouch::SUpEvent e);
+    void                      onMouseMove(Event::SCallbackInfo& info, Vector2D coords);
+    void                      onTouchMove(Event::SCallbackInfo& info, ITouch::SMotionEvent e);
 
-    void                      beginDrag(SCallbackInfo& info, const Vector2D& coordsGlobal);
-    void                      endDrag(SCallbackInfo& info);
-    bool                      handlePillClickAction(SCallbackInfo& info, uint32_t button);
+    void                      beginDrag(Event::SCallbackInfo& info, const Vector2D& coordsGlobal);
+    void                      endDrag(Event::SCallbackInfo& info);
+    bool                      handlePillClickAction(Event::SCallbackInfo& info, uint32_t button);
     bool                      focusAndDispatchToWindow(const std::string& dispatcher, const std::string& arg = "");
     void                      updateStateAndAnimate();
     void                      updateScoot();
@@ -131,11 +136,11 @@ class CHyprPill : public IHyprWindowDecoration {
     bool                      m_hasLastRenderBox     = false;
     CBox                      m_lastRenderBox;
 
-    SP<HOOK_CALLBACK_FN>      m_pMouseButtonCallback;
-    SP<HOOK_CALLBACK_FN>      m_pTouchDownCallback;
-    SP<HOOK_CALLBACK_FN>      m_pTouchUpCallback;
-    SP<HOOK_CALLBACK_FN>      m_pTouchMoveCallback;
-    SP<HOOK_CALLBACK_FN>      m_pMouseMoveCallback;
+    CHyprSignalListener       m_pMouseButtonCallback;
+    CHyprSignalListener       m_pTouchDownCallback;
+    CHyprSignalListener       m_pTouchUpCallback;
+    CHyprSignalListener       m_pTouchMoveCallback;
+    CHyprSignalListener       m_pMouseMoveCallback;
 
     std::optional<CHyprColor> m_forcedColor;
 
