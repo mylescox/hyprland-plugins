@@ -337,8 +337,11 @@ CBox CHyprPill::visibleBoxGlobal() const {
             if (!overlapsOcclusionX || !overlapsOcclusionY)
                 continue;
 
-            // Only windows crossing the owner's top edge are considered occluders.
-            const bool overlapsOwnerTopEdge = candidateTop < ownerTop && candidateBottom > ownerTop;
+            // Windows that cross or meet the owner's top edge are considered occluders.
+            // Using <= / >= (instead of strict < / >) covers the case where two floating
+            // windows are stacked at exactly the same position (same top edge), so that
+            // the lower-z window's pill dodges the upper-z window's pill.
+            const bool overlapsOwnerTopEdge = candidateTop <= ownerTop && candidateBottom >= ownerTop;
             if (!overlapsOwnerTopEdge)
                 continue;
 
@@ -673,6 +676,63 @@ bool CHyprPill::inputIsValid(bool ignoreSeatGrab) {
 
     if (!ignoreSeatGrab && g_pSeatManager->m_seatGrab && !g_pSeatManager->m_seatGrab->accepts(m_pWindow->wlSurface()->resource()))
         return false;
+
+    // Skip the per-frame positional checks while a drag is in progress so that
+    // moving a window into an occluding position doesn't interrupt the drag.
+    if (m_dragPending || m_draggingThis)
+        return true;
+
+    const auto PWINDOW = m_pWindow.lock();
+    if (!PWINDOW)
+        return false;
+
+    // If a special (magic) workspace is being shown on this monitor, pills on
+    // the normal workspace should not accept input – hovering over them would
+    // otherwise dismiss the special workspace overlay unexpectedly.
+    const auto PMONITOR = PWINDOW->m_monitor.lock();
+    if (PMONITOR && PMONITOR->m_activeSpecialWorkspace &&
+        PWINDOW->m_workspace && !PWINDOW->m_workspace->m_isSpecialWorkspace &&
+        !PWINDOW->m_pinned)
+        return false;
+
+    // A pill that is completely covered by a window above it is not
+    // interactable: the user cannot see it, so it should not accept hover or
+    // click input.
+    if (m_hasLastRenderBox) {
+        const auto& pillBox = m_lastRenderBox;
+        const auto  ownerIt = std::find(g_pCompositor->m_windows.begin(), g_pCompositor->m_windows.end(), PWINDOW);
+        const size_t ownerZ = ownerIt == g_pCompositor->m_windows.end()
+            ? 0ULL
+            : static_cast<size_t>(std::distance(g_pCompositor->m_windows.begin(), ownerIt));
+
+        size_t candidateZ = 0;
+        for (const auto& candidate : g_pCompositor->m_windows) {
+            const size_t z = candidateZ++;
+            if (!candidate || candidate == PWINDOW || candidate->isHidden() || !candidate->m_isMapped)
+                continue;
+
+            if (!candidate->m_workspace || !candidate->m_workspace->isVisible())
+                continue;
+
+            if (candidate->m_monitor != PWINDOW->m_monitor)
+                continue;
+
+            if (z <= ownerZ)
+                continue;
+
+            const auto candidateWSOff = (candidate->m_workspace && !candidate->m_pinned)
+                ? candidate->m_workspace->m_renderOffset->value()
+                : Vector2D();
+            const auto candidatePos  = candidate->m_realPosition->value() + candidate->m_floatingOffset + candidateWSOff;
+            const auto candidateSize = candidate->m_realSize->value();
+
+            if (candidatePos.x <= pillBox.x &&
+                candidatePos.y <= pillBox.y &&
+                candidatePos.x + candidateSize.x >= pillBox.x + pillBox.w &&
+                candidatePos.y + candidateSize.y >= pillBox.y + pillBox.h)
+                return false;
+        }
+    }
 
     return true;
 }

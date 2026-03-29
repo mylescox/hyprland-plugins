@@ -29,9 +29,7 @@
     packages = eachSystem (system: {
       inherit
         (pkgsFor.${system}.hyprlandPlugins)
-        hyprbars
         hyprpill
-        liquiddock
         ;
     });
 
@@ -45,9 +43,7 @@
           (prev.hyprlandPlugins
             or {})
           // {
-            hyprbars = callPackage ./hyprbars {};
             hyprpill = callPackage ./hyprpill {};
-            liquiddock = callPackage ./liquiddock {};
           };
       };
     };
