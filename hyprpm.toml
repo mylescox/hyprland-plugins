@@ -3,28 +3,12 @@ name = "hyprland-plugins"
 authors = ["Vaxry"]
 commit_pins = []
 
-[hyprbars]
-description = "A plugin to add title bars to windows"
-authors = ["Vaxry"]
-output = "hyprbars/hyprbars.so"
-build = [
-    "make -C hyprbars all",
-]
-
 
 [hyprpill]
 description = "A plugin to add animated pill grabbers to windows"
-authors = ["Vaxry"]
+authors = ["mylescox"]
 output = "hyprpill/hyprpill.so"
 build = [
     "make -C hyprpill all",
 ]
 
-
-[liquiddock]
-description = "A dock plugin with gooey SDF rendering and physics-based animations"
-authors = ["mylescox"]
-output = "liquiddock/liquiddock.so"
-build = [
-    "make -C liquiddock all",
-]

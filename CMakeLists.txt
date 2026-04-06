@@ -7,6 +7,4 @@ project(hyprland-plugins
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_subdirectory(hyprbars)
 add_subdirectory(hyprpill)
-add_subdirectory(liquiddock)

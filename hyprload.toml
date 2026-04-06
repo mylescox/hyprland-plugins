@@ -1,19 +1,7 @@
-[hyprbars]
-description = "A plugin to add title bars to windows"
-version = "1.0"
-authors = ["Vaxry"]
-
-[hyprbars.build]
-output = "hyprbars/hyprbars.so"
-steps = [
-    "make -C hyprbars all",
-]
-
-
 [hyprpill]
 description = "A plugin to add animated pill grabbers to windows"
 version = "1.0"
-authors = ["Vaxry"]
+authors = ["mylescox"]
 
 [hyprpill.build]
 output = "hyprpill/hyprpill.so"
@@ -21,14 +9,3 @@ steps = [
     "make -C hyprpill all",
 ]
 
-
-[liquiddock]
-description = "A dock plugin with gooey SDF rendering and physics-based animations"
-version = "0.1"
-authors = ["mylescox"]
-
-[liquiddock.build]
-output = "liquiddock/liquiddock.so"
-steps = [
-    "make -C liquiddock all",
-]
