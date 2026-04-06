@@ -7,6 +7,7 @@
 #include <format>
 #include <string>
 #include <tuple>
+#include <unordered_map>
 #include <vector>
 #include <hyprland/src/Compositor.hpp>
 #include <hyprland/src/config/ConfigManager.hpp>
@@ -296,7 +297,7 @@ CBox CHyprPill::visibleBoxGlobal() const {
     }
 
     std::vector<SHorizontalInterval> occluders;
-    occluders.reserve(g_pCompositor->m_windows.size());
+    occluders.reserve(g_pCompositor->m_windows.size() * 2);
 
     const bool canDetectOccluders = owner->m_workspace && owner->m_workspace->isVisible();
     if (canDetectOccluders) {
@@ -314,7 +315,29 @@ CBox CHyprPill::visibleBoxGlobal() const {
         const float occlusionTop     = std::lround(basePillY - hoverHeightPad + hoverOffsetY);
         const float occlusionBottom  = occlusionTop + box.h + hoverHeightPad * 2.F;
 
-        for (const auto& candidate : g_pCompositor->m_windows) {
+        std::unordered_map<void*, CBox> candidatePillBoxes;
+        candidatePillBoxes.reserve(g_pGlobalState->pills.size());
+        for (const auto& pillRef : g_pGlobalState->pills) {
+            const auto pill = pillRef.lock();
+            if (!pill || pill.get() == this || pill->m_hidden || !pill->m_hasLastRenderBox || pill->m_lastRenderBox.w <= 0 || pill->m_lastRenderBox.h <= 0)
+                continue;
+
+            const auto pillOwner = pill->getOwner();
+            if (!pillOwner)
+                continue;
+
+            candidatePillBoxes.insert_or_assign(pillOwner.get(), pill->m_lastRenderBox);
+        }
+
+        const auto addOccluder = [&](float left, float right) {
+            const float clippedLeft  = std::max(baseWindowLeft, left - occluderMargin);
+            const float clippedRight = std::min(baseWindowRight, right + occluderMargin);
+            if (clippedRight > clippedLeft)
+                occluders.push_back({clippedLeft, clippedRight});
+        };
+
+        for (size_t candidateZ = 0; candidateZ < g_pCompositor->m_windows.size(); ++candidateZ) {
+            const auto& candidate = g_pCompositor->m_windows[candidateZ];
             if (!candidate || candidate == owner || candidate->isHidden() || !candidate->m_isMapped)
                 continue;
 
@@ -322,6 +345,10 @@ CBox CHyprPill::visibleBoxGlobal() const {
                 continue;
 
             if (candidate->m_monitor != owner->m_monitor)
+                continue;
+
+            // Only dodge pill/window occluders that are stacked above the owner.
+            if (candidateZ <= ownerZ)
                 continue;
 
             const auto candidatePos  = candidate->m_realPosition->value() + candidate->m_floatingOffset;
@@ -332,32 +359,29 @@ CBox CHyprPill::visibleBoxGlobal() const {
             const float candidateRight  = candidateLeft + candidateSize.x;
             const float candidateBottom = candidateTop + candidateSize.y;
 
-            const bool overlapsOcclusionX = candidateRight > occlusionLeft && candidateLeft < occlusionRight;
-            const bool overlapsOcclusionY = candidateBottom > occlusionTop && candidateTop < occlusionBottom;
-            if (!overlapsOcclusionX || !overlapsOcclusionY)
-                continue;
-
             // Windows that cross or meet the owner's top edge are considered occluders.
             // Using <= / >= (instead of strict < / >) covers the case where two floating
             // windows are stacked at exactly the same position (same top edge), so that
             // the lower-z window's pill dodges the upper-z window's pill.
             const bool overlapsOwnerTopEdge = candidateTop <= ownerTop && candidateBottom >= ownerTop;
-            if (!overlapsOwnerTopEdge)
+            const bool overlapsWindowOcclusionX = candidateRight > occlusionLeft && candidateLeft < occlusionRight;
+            const bool overlapsWindowOcclusionY = candidateBottom > occlusionTop && candidateTop < occlusionBottom;
+            if (overlapsWindowOcclusionX && overlapsWindowOcclusionY && overlapsOwnerTopEdge)
+                addOccluder(candidateLeft, candidateRight);
+
+            const auto candidatePillIt = candidatePillBoxes.find(candidate.get());
+            if (candidatePillIt == candidatePillBoxes.end())
                 continue;
 
-            const float clippedLeft  = std::max(baseWindowLeft, candidateLeft - occluderMargin);
-            const float clippedRight = std::min(baseWindowRight, candidateRight + occluderMargin);
-            if (clippedRight <= clippedLeft)
-                continue;
-
-            const auto candidateIt = std::find(g_pCompositor->m_windows.begin(), g_pCompositor->m_windows.end(), candidate);
-            const auto candidateZ  = candidateIt == g_pCompositor->m_windows.end() ? 0ULL : static_cast<size_t>(std::distance(g_pCompositor->m_windows.begin(), candidateIt));
-
-            // Only dodge windows that are stacked above the owner.
-            if (candidateZ <= ownerZ)
-                continue;
-
-            occluders.push_back({clippedLeft, clippedRight});
+            const auto& candidatePillBox    = candidatePillIt->second;
+            const float candidatePillLeft   = static_cast<float>(candidatePillBox.x);
+            const float candidatePillTop    = static_cast<float>(candidatePillBox.y);
+            const float candidatePillRight  = candidatePillLeft + candidatePillBox.w;
+            const float candidatePillBottom = candidatePillTop + candidatePillBox.h;
+            const bool  overlapsPillOcclusionX = candidatePillRight > occlusionLeft && candidatePillLeft < occlusionRight;
+            const bool  overlapsPillOcclusionY = candidatePillBottom > occlusionTop && candidatePillTop < occlusionBottom;
+            if (overlapsPillOcclusionX && overlapsPillOcclusionY)
+                addOccluder(candidatePillLeft, candidatePillRight);
         }
     }
 
