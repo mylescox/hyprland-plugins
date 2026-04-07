@@ -67,6 +67,7 @@ class CHyprPill : public IHyprWindowDecoration {
     void                      removeScoot();
     void                      updateDragPosition(const Vector2D& coordsGlobal);
     void                      updateCursorShape(const std::optional<Vector2D>& coords = std::nullopt);
+    static CHyprPill*         topmostPillAt(const Vector2D& coordsGlobal, bool clickHitbox, bool ignoreSeatGrab, const CHyprPill* preferred);
     bool                      inputIsValid(bool ignoreSeatGrab = false);
     bool                      inputIsEligibleForRouting(bool ignoreSeatGrab = false) const;
     bool                      ownsInteractionAt(const Vector2D& coordsGlobal, bool clickHitbox, bool ignoreSeatGrab = false) const;
