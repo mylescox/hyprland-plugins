@@ -104,7 +104,7 @@ std::vector<SHorizontalInterval> subtractForbiddenIntervals(const SHorizontalInt
 }
 
 CHyprPill* topmostPillAt(const Vector2D& coordsGlobal, bool clickHitbox, bool ignoreSeatGrab, const CHyprPill* preferred) {
-    if (!g_pGlobalState || g_pGlobalState->dragPill.lock())
+    if (!g_pGlobalState)
         return nullptr;
 
     CHyprPill* best  = nullptr;
@@ -722,7 +722,10 @@ bool CHyprPill::isHovering() const {
 }
 
 bool CHyprPill::isHovering(const Vector2D& coordsGlobal) const {
-    return ownsInteractionAt(coordsGlobal, false, true);
+    if (g_pGlobalState && g_pGlobalState->dragPill.lock())
+        return false;
+
+    return ownsInteractionAt(coordsGlobal, false);
 }
 
 bool CHyprPill::ownsInteractionAt(const Vector2D& coordsGlobal, bool clickHitbox, bool ignoreSeatGrab) const {
