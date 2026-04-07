@@ -59,6 +59,14 @@ bool intervalsOverlap(const SHorizontalInterval& a, const SHorizontalInterval& b
     return a.start < b.end && b.start < a.end;
 }
 
+size_t windowZIndex(const PHLWINDOW& window) {
+    if (!window)
+        return 0;
+
+    const auto it = std::find(g_pCompositor->m_windows.begin(), g_pCompositor->m_windows.end(), window);
+    return it == g_pCompositor->m_windows.end() ? 0ULL : static_cast<size_t>(std::distance(g_pCompositor->m_windows.begin(), it));
+}
+
 std::vector<SHorizontalInterval> subtractForbiddenIntervals(const SHorizontalInterval& domain, std::vector<SHorizontalInterval> forbidden) {
     if (domain.end <= domain.start)
         return {};
@@ -93,6 +101,32 @@ std::vector<SHorizontalInterval> subtractForbiddenIntervals(const SHorizontalInt
         allowed.push_back({cursor, domain.end});
 
     return allowed;
+}
+
+CHyprPill* topmostPillAt(const Vector2D& coordsGlobal, bool clickHitbox, bool ignoreSeatGrab, const CHyprPill* preferred) {
+    if (!g_pGlobalState || !g_pGlobalState->dragPill.expired())
+        return nullptr;
+
+    CHyprPill* best  = nullptr;
+    size_t     bestZ = 0;
+
+    for (const auto& pillRef : g_pGlobalState->pills) {
+        const auto pill = pillRef.lock();
+        if (!pill || !pill->inputIsEligibleForRouting(ignoreSeatGrab))
+            continue;
+
+        const auto hitbox = clickHitbox ? pill->clickHitboxGlobal() : pill->hoverHitboxGlobal();
+        if (!VECINRECT(coordsGlobal, hitbox.x, hitbox.y, hitbox.x + hitbox.w, hitbox.y + hitbox.h))
+            continue;
+
+        const size_t candidateZ = windowZIndex(pill->getOwner());
+        if (!best || candidateZ > bestZ || (candidateZ == bestZ && pill.get() == preferred)) {
+            best  = pill.get();
+            bestZ = candidateZ;
+        }
+    }
+
+    return best;
 }
 }
 
@@ -684,12 +718,21 @@ Vector2D CHyprPill::cursorRelativeToPill() const {
 }
 
 bool CHyprPill::isHovering() const {
-    const auto coords = g_pInputManager->getMouseCoordsInternal();
-    const auto hb     = hoverHitboxGlobal();
-    return VECINRECT(coords, hb.x, hb.y, hb.x + hb.w, hb.y + hb.h);
+    return isHovering(g_pInputManager->getMouseCoordsInternal());
 }
 
-bool CHyprPill::inputIsValid(bool ignoreSeatGrab) {
+bool CHyprPill::isHovering(const Vector2D& coordsGlobal) const {
+    return ownsInteractionAt(coordsGlobal, false, true);
+}
+
+bool CHyprPill::ownsInteractionAt(const Vector2D& coordsGlobal, bool clickHitbox, bool ignoreSeatGrab) const {
+    if (!inputIsEligibleForRouting(ignoreSeatGrab))
+        return false;
+
+    return topmostPillAt(coordsGlobal, clickHitbox, ignoreSeatGrab, this) == this;
+}
+
+bool CHyprPill::inputIsEligibleForRouting(bool ignoreSeatGrab) const {
     static auto* const PENABLED = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprpill:enabled")->getDataStaticPtr();
 
     if (!**PENABLED || m_hidden)
@@ -700,11 +743,6 @@ bool CHyprPill::inputIsValid(bool ignoreSeatGrab) {
 
     if (!ignoreSeatGrab && g_pSeatManager->m_seatGrab && !g_pSeatManager->m_seatGrab->accepts(m_pWindow->wlSurface()->resource()))
         return false;
-
-    // Skip the per-frame positional checks while a drag is in progress so that
-    // moving a window into an occluding position doesn't interrupt the drag.
-    if (m_dragPending || m_draggingThis)
-        return true;
 
     const auto PWINDOW = m_pWindow.lock();
     if (!PWINDOW)
@@ -724,10 +762,7 @@ bool CHyprPill::inputIsValid(bool ignoreSeatGrab) {
     // click input.
     if (m_hasLastRenderBox) {
         const auto& pillBox = m_lastRenderBox;
-        const auto  ownerIt = std::find(g_pCompositor->m_windows.begin(), g_pCompositor->m_windows.end(), PWINDOW);
-        const size_t ownerZ = ownerIt == g_pCompositor->m_windows.end()
-            ? 0ULL
-            : static_cast<size_t>(std::distance(g_pCompositor->m_windows.begin(), ownerIt));
+        const auto  ownerZ  = windowZIndex(PWINDOW);
 
         size_t candidateZ = 0;
         for (const auto& candidate : g_pCompositor->m_windows) {
@@ -761,12 +796,25 @@ bool CHyprPill::inputIsValid(bool ignoreSeatGrab) {
     return true;
 }
 
+bool CHyprPill::inputIsValid(bool ignoreSeatGrab) {
+    if (!inputIsEligibleForRouting(ignoreSeatGrab))
+        return false;
+
+    // Skip the per-frame positional checks while a drag is in progress so that
+    // moving a window into an occluding position doesn't interrupt the drag.
+    if (m_dragPending || m_draggingThis)
+        return true;
+
+    return g_pGlobalState->dragPill.expired() || g_pGlobalState->dragPill.get() == this;
+}
+
 void CHyprPill::beginDrag(Event::SCallbackInfo& info, const Vector2D& coordsGlobal) {
     if (!g_pGlobalState->dragPill.expired() && g_pGlobalState->dragPill.get() != this)
         return;
 
     const auto clickHitbox = clickHitboxGlobal();
-    if (!VECINRECT(coordsGlobal, clickHitbox.x, clickHitbox.y, clickHitbox.x + clickHitbox.w, clickHitbox.y + clickHitbox.h))
+    if (!VECINRECT(coordsGlobal, clickHitbox.x, clickHitbox.y, clickHitbox.x + clickHitbox.w, clickHitbox.y + clickHitbox.h) ||
+        !ownsInteractionAt(coordsGlobal, true))
         return;
 
     const auto PWINDOW = m_pWindow.lock();
@@ -930,7 +978,8 @@ void CHyprPill::onMouseButton(Event::SCallbackInfo& info, IPointer::SButtonEvent
 
     const auto coordsGlobal = g_pInputManager->getMouseCoordsInternal();
     const auto clickHitbox  = clickHitboxGlobal();
-    if (!VECINRECT(coordsGlobal, clickHitbox.x, clickHitbox.y, clickHitbox.x + clickHitbox.w, clickHitbox.y + clickHitbox.h)) {
+    if (!VECINRECT(coordsGlobal, clickHitbox.x, clickHitbox.y, clickHitbox.x + clickHitbox.w, clickHitbox.y + clickHitbox.h) ||
+        !ownsInteractionAt(coordsGlobal, true)) {
         updateCursorShape(coordsGlobal);
         return;
     }
@@ -948,12 +997,14 @@ void CHyprPill::onTouchDown(Event::SCallbackInfo& info, ITouch::SDownEvent e) {
     if (!inputIsValid() || e.touchID != 0)
         return;
 
-    m_touchEv = true;
-    m_touchId = e.touchID;
-
     auto PMONITOR     = m_pWindow->m_monitor.lock();
     PMONITOR          = PMONITOR ? PMONITOR : Desktop::focusState()->monitor();
     const auto COORDS = Vector2D(PMONITOR->m_position.x + e.pos.x * PMONITOR->m_size.x, PMONITOR->m_position.y + e.pos.y * PMONITOR->m_size.y);
+    if (!ownsInteractionAt(COORDS, true))
+        return;
+
+    m_touchEv = true;
+    m_touchId = e.touchID;
     beginDrag(info, COORDS);
 }
 
@@ -999,9 +1050,8 @@ void CHyprPill::onMouseMove(Event::SCallbackInfo& info, Vector2D coords) {
         return;
     }
 
-    const auto hb    = hoverHitboxGlobal();
     const bool wasHovered = m_hovered;
-    m_hovered        = VECINRECT(coords, hb.x, hb.y, hb.x + hb.w, hb.y + hb.h);
+    m_hovered        = isHovering(coords);
 
     if (m_hovered != wasHovered)
         damageEntire();
@@ -1099,20 +1149,14 @@ void CHyprPill::updateCursorShape(const std::optional<Vector2D>& coords) {
         }
     }
 
-    const auto COORDS = coords.value_or(g_pInputManager->getMouseCoordsInternal());
-    for (auto& p : g_pGlobalState->pills) {
-        const auto PPILL = p.lock();
-        if (!PPILL || !PPILL->inputIsValid(true))
-            continue;
-
-        const auto HB = PPILL->hoverHitboxGlobal();
-        if (VECINRECT(COORDS, HB.x, HB.y, HB.x + HB.w, HB.y + HB.h)) {
-            if (!HOVERCURSOR.empty())
-                Cursor::overrideController->setOverride(HOVERCURSOR, Cursor::CURSOR_OVERRIDE_UNKNOWN);
-            else
-                Cursor::overrideController->unsetOverride(Cursor::CURSOR_OVERRIDE_UNKNOWN);
-            return;
-        }
+    const auto COORDS        = coords.value_or(g_pInputManager->getMouseCoordsInternal());
+    const auto HOVEREDPILL = topmostPillAt(COORDS, false, true, nullptr);
+    if (HOVEREDPILL) {
+        if (!HOVERCURSOR.empty())
+            Cursor::overrideController->setOverride(HOVERCURSOR, Cursor::CURSOR_OVERRIDE_UNKNOWN);
+        else
+            Cursor::overrideController->unsetOverride(Cursor::CURSOR_OVERRIDE_UNKNOWN);
+        return;
     }
 
     Cursor::overrideController->unsetOverride(Cursor::CURSOR_OVERRIDE_UNKNOWN);
