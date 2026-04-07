@@ -103,31 +103,6 @@ std::vector<SHorizontalInterval> subtractForbiddenIntervals(const SHorizontalInt
     return allowed;
 }
 
-CHyprPill* topmostPillAt(const Vector2D& coordsGlobal, bool clickHitbox, bool ignoreSeatGrab, const CHyprPill* preferred) {
-    if (!g_pGlobalState)
-        return nullptr;
-
-    CHyprPill* best  = nullptr;
-    size_t     bestZ = 0;
-
-    for (const auto& pillRef : g_pGlobalState->pills) {
-        const auto pill = pillRef.lock();
-        if (!pill || !pill->inputIsEligibleForRouting(ignoreSeatGrab))
-            continue;
-
-        const auto hitbox = clickHitbox ? pill->clickHitboxGlobal() : pill->hoverHitboxGlobal();
-        if (!VECINRECT(coordsGlobal, hitbox.x, hitbox.y, hitbox.x + hitbox.w, hitbox.y + hitbox.h))
-            continue;
-
-        const size_t candidateZ = windowStackPosition(pill->getOwner());
-        if (!best || candidateZ > bestZ || (candidateZ == bestZ && pill.get() == preferred)) {
-            best  = pill.get();
-            bestZ = candidateZ;
-        }
-    }
-
-    return best;
-}
 }
 
 CHyprPill::CHyprPill(PHLWINDOW pWindow) : IHyprWindowDecoration(pWindow), m_pWindow(pWindow) {
@@ -733,6 +708,32 @@ bool CHyprPill::ownsInteractionAt(const Vector2D& coordsGlobal, bool clickHitbox
         return false;
 
     return topmostPillAt(coordsGlobal, clickHitbox, ignoreSeatGrab, this) == this;
+}
+
+CHyprPill* CHyprPill::topmostPillAt(const Vector2D& coordsGlobal, bool clickHitbox, bool ignoreSeatGrab, const CHyprPill* preferred) {
+    if (!g_pGlobalState)
+        return nullptr;
+
+    CHyprPill* best  = nullptr;
+    size_t     bestZ = 0;
+
+    for (const auto& pillRef : g_pGlobalState->pills) {
+        const auto pill = pillRef.lock();
+        if (!pill || !pill->inputIsEligibleForRouting(ignoreSeatGrab))
+            continue;
+
+        const auto hitbox = clickHitbox ? pill->clickHitboxGlobal() : pill->hoverHitboxGlobal();
+        if (!VECINRECT(coordsGlobal, hitbox.x, hitbox.y, hitbox.x + hitbox.w, hitbox.y + hitbox.h))
+            continue;
+
+        const size_t candidateZ = windowStackPosition(pill->getOwner());
+        if (!best || candidateZ > bestZ || (candidateZ == bestZ && pill.get() == preferred)) {
+            best  = pill.get();
+            bestZ = candidateZ;
+        }
+    }
+
+    return best;
 }
 
 bool CHyprPill::inputIsEligibleForRouting(bool ignoreSeatGrab) const {
