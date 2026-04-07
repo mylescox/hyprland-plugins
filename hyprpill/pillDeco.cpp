@@ -59,7 +59,7 @@ bool intervalsOverlap(const SHorizontalInterval& a, const SHorizontalInterval& b
     return a.start < b.end && b.start < a.end;
 }
 
-size_t windowZIndex(const PHLWINDOW& window) {
+size_t windowStackPosition(const PHLWINDOW& window) {
     if (!window)
         return 0;
 
@@ -104,7 +104,7 @@ std::vector<SHorizontalInterval> subtractForbiddenIntervals(const SHorizontalInt
 }
 
 CHyprPill* topmostPillAt(const Vector2D& coordsGlobal, bool clickHitbox, bool ignoreSeatGrab, const CHyprPill* preferred) {
-    if (!g_pGlobalState || !g_pGlobalState->dragPill.expired())
+    if (!g_pGlobalState || g_pGlobalState->dragPill.lock())
         return nullptr;
 
     CHyprPill* best  = nullptr;
@@ -119,7 +119,7 @@ CHyprPill* topmostPillAt(const Vector2D& coordsGlobal, bool clickHitbox, bool ig
         if (!VECINRECT(coordsGlobal, hitbox.x, hitbox.y, hitbox.x + hitbox.w, hitbox.y + hitbox.h))
             continue;
 
-        const size_t candidateZ = windowZIndex(pill->getOwner());
+        const size_t candidateZ = windowStackPosition(pill->getOwner());
         if (!best || candidateZ > bestZ || (candidateZ == bestZ && pill.get() == preferred)) {
             best  = pill.get();
             bestZ = candidateZ;
@@ -762,7 +762,7 @@ bool CHyprPill::inputIsEligibleForRouting(bool ignoreSeatGrab) const {
     // click input.
     if (m_hasLastRenderBox) {
         const auto& pillBox = m_lastRenderBox;
-        const auto  ownerZ  = windowZIndex(PWINDOW);
+        const auto  ownerZ  = windowStackPosition(PWINDOW);
 
         size_t candidateZ = 0;
         for (const auto& candidate : g_pCompositor->m_windows) {
@@ -805,7 +805,8 @@ bool CHyprPill::inputIsValid(bool ignoreSeatGrab) {
     if (m_dragPending || m_draggingThis)
         return true;
 
-    return g_pGlobalState->dragPill.expired() || g_pGlobalState->dragPill.get() == this;
+    const auto dragPill = g_pGlobalState->dragPill.lock();
+    return !dragPill || dragPill.get() == this;
 }
 
 void CHyprPill::beginDrag(Event::SCallbackInfo& info, const Vector2D& coordsGlobal) {
