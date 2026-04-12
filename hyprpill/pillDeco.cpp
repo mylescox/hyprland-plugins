@@ -697,7 +697,7 @@ bool CHyprPill::isHovering() const {
 }
 
 bool CHyprPill::isHovering(const Vector2D& coordsGlobal) const {
-    if (g_pGlobalState && g_pGlobalState->dragPill.lock())
+    if (g_pGlobalState && !g_pGlobalState->dragPill.expired())
         return false;
 
     return ownsInteractionAt(coordsGlobal, false);
@@ -718,7 +718,7 @@ CHyprPill* CHyprPill::topmostPillAt(const Vector2D& coordsGlobal, bool clickHitb
     size_t     bestZ = 0;
 
     for (const auto& pillRef : g_pGlobalState->pills) {
-        const auto pill = pillRef.lock();
+        auto* pill = pillRef.get();
         if (!pill || !pill->inputIsEligibleForRouting(ignoreSeatGrab))
             continue;
 
@@ -727,8 +727,8 @@ CHyprPill* CHyprPill::topmostPillAt(const Vector2D& coordsGlobal, bool clickHitb
             continue;
 
         const size_t candidateZ = windowStackPosition(pill->getOwner());
-        if (!best || candidateZ > bestZ || (candidateZ == bestZ && pill.get() == preferred)) {
-            best  = pill.get();
+        if (!best || candidateZ > bestZ || (candidateZ == bestZ && pill == preferred)) {
+            best  = pill;
             bestZ = candidateZ;
         }
     }
@@ -809,8 +809,8 @@ bool CHyprPill::inputIsValid(bool ignoreSeatGrab) {
     if (m_dragPending || m_draggingThis)
         return true;
 
-    const auto dragPill = g_pGlobalState->dragPill.lock();
-    return !dragPill || dragPill.get() == this;
+    const auto* dragPill = g_pGlobalState->dragPill.get();
+    return !dragPill || dragPill == this;
 }
 
 void CHyprPill::beginDrag(Event::SCallbackInfo& info, const Vector2D& coordsGlobal) {
@@ -1141,7 +1141,7 @@ void CHyprPill::updateCursorShape(const std::optional<Vector2D>& coords) {
     const auto         GRABCURSOR  = std::string{*PGRABCURSOR};
 
     for (auto& p : g_pGlobalState->pills) {
-        const auto PPILL = p.lock();
+        auto* PPILL = p.get();
         if (!PPILL)
             continue;
 
