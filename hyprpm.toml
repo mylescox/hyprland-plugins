@@ -1,9 +1,6 @@
 [repository]
 name = "hyprland-plugins"
 authors = ["Vaxry"]
-commit_pins = [
-    ["521ece463c4a9d3d128670688a34756805a4328f", "d2454fc4c2a0d02fc305ff860e0f25020fb5392a"], # 0.54.3
-]
 
 
 [hyprpill]
